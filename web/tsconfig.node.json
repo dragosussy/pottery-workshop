@@ -1,0 +1,13 @@
+{
+  "extends": "@tsconfig/node22/tsconfig.json",
+  "include": ["vite.config.ts", "vitest.config.ts", "mock/**/*.ts", "src/mocks/**/*.ts", "src/api/types.ts", "src/api/defaults.ts", "src/utils/dryness.ts", "src/utils/time.ts", "src/utils/format.ts"],
+  "compilerOptions": {
+    "noEmit": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "types": ["node"],
+    "strict": true
+  }
+}

@@ -18,9 +18,16 @@ fi
 source $ENV_FILE
 
 IMAGE="qqrtos/humiditycontrol:latest"
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
+BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-echo "Building image for $ENV..."
-docker build -t $IMAGE .
+echo "Building image $VERSION ($COMMIT) for $ENV..."
+docker build --platform linux/arm64 \
+  --build-arg VERSION="$VERSION" \
+  --build-arg COMMIT="$COMMIT" \
+  --build-arg BUILT_AT="$BUILT_AT" \
+  -t $IMAGE .
 
 echo "Pushing image..."
 docker push $IMAGE

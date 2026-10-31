@@ -1,11 +1,34 @@
-version: "3.9"
-
 services:
   humiditycontrol:
     image: qqrtos/humiditycontrol:latest
     container_name: humiditycontrol
     restart: always
+    stop_grace_period: 10s      # time to flush the open minute on shutdown
+    logging:                    # keep logs bounded on the SD card (~30 MB max)
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
-      - "8080:8080"
+      # Plain HTTP over Tailscale at http://atelier (the Pi's Tailscale
+      # machine name; MagicDNS resolves it for tailnet devices). On a shared
+      # Wi-Fi, consider binding to the Tailscale IP instead, e.g.
+      # "100.111.137.39:80:8080".
+      - "80:8080"
+    devices:
+      - /dev/i2c-1:/dev/i2c-1   # enable I²C on the Pi first (raspi-config)
+    volumes:
+      - ./data:/data            # database, photos and backups
     environment:
       - PORT=8080
+      - SENSOR_DRIVER=sht4x     # sht4x (SHT40/41/45) or sht3x (SHT31)
+      - I2C_BUS=/dev/i2c-1
+      - SENSORS=main:0x44       # name:I²C address, e.g. shelf:0x44,top:0x45
+      - POLL_INTERVAL=5s
+      - DB_PATH=/data/humidity.db
+      - PHOTO_DIR=/data/photos
+      - BACKUP_DIR=/data/backups
+      - BACKUP_KEEP=14
+      - STUDIO_TZ=Europe/Bucharest   # initial studio time zone; changeable in Settings
+      - CLOCK_CHECK=kernel      # "off" if readings never start (clock_synced stays false in /health)
+      - LOG_LEVEL=info
