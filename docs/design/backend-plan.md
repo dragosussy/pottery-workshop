@@ -33,9 +33,12 @@ dependencies passed in explicitly in `run()`, and `slog`.
 cmd/humidity/
   main.go          run(): config → store (backup, migrate) → sensors → monitor → recorder → api → serve
   sensors.go       driver selection (sht3x | sht4x | sim)
+  pump.go          pump driver selection (none | gpio | sim)
 internal/
   config/          env config
-  sensor/          Reading, Sensor interface; sht/ (done), sim/
+  sensor/          Reading, Sensor interface; sht/ (done), sim/ (sensor + pump)
+  actuator/        Switch interface; gpio/ (Linux GPIO character device, go-gpiocdev)
+  control/         the pump controller: pulse/rest loop with safety limits
   monitor/         polling, per-cycle snapshots, health, calibration offsets
   store/           SQLite open, migrate, backup; one file per table group
     migrations/    0001_init.sql … (embedded)
@@ -325,13 +328,50 @@ most thorough table tests (§12).
 1. config
 2. open the store → startup backup if due → migrate
 3. sensors
-4. an `errgroup` running the monitor, the recorder, the daily backup, photo
-   cleanup and the HTTP server
+4. the pump (if `PUMP_DRIVER` isn't `none`): opened driven off, then the
+   controller, given the saved target; `shelf.Service.OnTarget` passes later
+   target changes to it
+5. an `errgroup` running the monitor, the recorder, the controller, the daily
+   backup, photo cleanup and the HTTP server
 
 On SIGTERM (`docker stop`, or the Pi 5 power button triggering a system
-shutdown), the recorder flushes the open minute and the server shuts down
-within 5 s. The future control loop becomes one more group member, and turns
-the humidifier off on shutdown.
+shutdown), the controller switches the pump off, the recorder flushes the
+open minute and the server shuts down within 5 s. Closing the GPIO line
+drives it off once more before releasing it.
+
+### 10.1 The pump controller (`internal/control`)
+
+The shelf has no fan, so mist takes time to reach the sensor. The controller
+works in **pulses**: when the room humidity (mean of the sensors read this
+cycle) is more than `PUMP_HYSTERESIS` (2 %) below the target, it runs the pump
+for `PUMP_PULSE` (10 s), then **rests** for `PUMP_REST` (3 min) before deciding
+again. It decides on every monitor cycle and on a 1 s clock (to end pulses on
+time). The pump only adds moisture; a shelf above the target dries by itself
+or with the plastic opened.
+
+Safety, in order: the pump stays off
+
+- after a **trip**: 6 pulses in a row that didn't raise the
+  humidity by 0.3 % by the end of their rest, while still below the target.
+  This usually means an empty tank or a blocked nozzle. It is logged
+  (`pump_tripped`), and the pump stays off until Resume (`POST /control/reset`);
+- without a target;
+- without a fresh reading (none in the last 30 s); a running pulse stops too;
+- at or above `PUMP_MAX_RH` (95 %).
+
+There is **no runtime cap** (owner decision 2026-10-31): holding a damp
+shelf can take a lot of pumping, for days. A dry or blocked pump is caught
+by the trip instead.
+
+A **manual run** (`POST /control/override`, at most 60 s) bypasses all of these:
+it is for checking the wiring and priming after a refill. A failing switch
+write is logged once and retried every second while the pump should be off.
+
+`PUMP_ACTIVE_LOW` has no default: guessing the relay board's polarity wrong
+would run the pump while the app reports it off. The GPIO chip is found by
+its label (`pinctrl-rp1`), because its number changed between Pi 5 kernels.
+Pulse history (for the "ran X in the last 24 h" display) is kept in memory;
+a restart forgets it.
 
 ## 11. Build and deploy
 
@@ -409,4 +449,4 @@ the humidifier off on shutdown.
 | B3 | Observations (POST/PATCH/DELETE/undelete), flags, `went_wetter`, `changed` events | F3 |
 | B4 | `predict` complete: dose index, live ETA, adaptation, samples, learning period, slots + visit, check-these, `much_slower`, snapshots | F4 |
 | B5 | Hardening on the Pi: a power-off/on cycle test, performance, accuracy summary for history | F5 / v1 |
-| Later | Fitted thickness and size factors, the control loop, the SHT4x heater, alerts | |
+| Later | Fitted thickness and size factors, the SHT4x heater, alerts | |

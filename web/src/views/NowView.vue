@@ -1,12 +1,16 @@
 <script setup lang="ts">
 // Now (home, plan §4.1): banners, climate card, trim card, shelf summary, actions.
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useLiveStore } from '@/stores/live'
 import { useShelfStore } from '@/stores/shelf'
 import { useSheet } from '@/composables/useSheet'
+import { showToast } from '@/composables/useToast'
+import { api } from '@/api/endpoints'
+import { errorMessage } from '@/api/client'
 import ClimateCard from '@/components/ClimateCard.vue'
 import TrimCard from '@/components/TrimCard.vue'
+import TargetRow from '@/components/TargetRow.vue'
 import ShelfSummary from '@/components/ShelfSummary.vue'
 import Banner from '@/components/Banner.vue'
 import { formatSpanWords } from '@/utils/duration'
@@ -17,6 +21,20 @@ const shelf = useShelfStore()
 const sheet = useSheet()
 const router = useRouter()
 const status = computed(() => live.status)
+
+const pumpTripped = computed(() => !!status.value?.control.safety?.tripped)
+const resuming = ref(false)
+async function resumePump() {
+  resuming.value = true
+  try {
+    await api.resetPump()
+    void live.fetchStatus()
+  } catch (e) {
+    showToast({ message: errorMessage(e, "Couldn't reach the pump"), tone: 'error' })
+  } finally {
+    resuming.value = false
+  }
+}
 
 onMounted(() => void shelf.refresh())
 
@@ -53,6 +71,15 @@ function checkOffline() {
       </template>
     </Banner>
 
+    <Banner v-if="pumpTripped" tone="error" icon="⚠" data-testid="pump-tripped-banner">
+      <strong>The pump stopped for safety</strong> · the humidity didn't rise after several runs. Check the water tank and
+      the nozzle.
+      <template #actions>
+        <button type="button" class="btn btn-primary" :disabled="resuming" @click="resumePump">Resume</button>
+        <RouterLink to="/settings#pump" class="btn">Pump settings</RouterLink>
+      </template>
+    </Banner>
+
     <p v-if="live.clockSynced === false" class="clock-note" data-testid="clock-note">
       ⏱ The controller's clock hasn't synced yet. Recording starts once it has (usually within a minute).
     </p>
@@ -60,6 +87,7 @@ function checkOffline() {
     <div :class="{ 'offline-dim': live.offline }">
       <ClimateCard />
     </div>
+    <TargetRow />
     <TrimCard />
     <div :class="{ 'offline-dim': live.offline }">
       <ShelfSummary />

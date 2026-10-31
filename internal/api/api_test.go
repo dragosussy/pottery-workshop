@@ -21,6 +21,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"humidity/internal/control"
 	"humidity/internal/monitor"
 	"humidity/internal/photos"
 	"humidity/internal/recorder"
@@ -38,7 +39,10 @@ type harness struct {
 	mon *monitor.Monitor
 }
 
-func newHarness(t *testing.T) *harness {
+func newHarness(t *testing.T) *harness { return newHarnessWith(t, false) }
+
+// newHarnessWith optionally adds a controller with a simulated pump.
+func newHarnessWith(t *testing.T, pump bool) *harness {
 	t.Helper()
 	dir := t.TempDir()
 	st, err := store.Open(filepath.Join(dir, "h.db"))
@@ -58,8 +62,13 @@ func newHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var ctl *control.Controller
+	if pump {
+		ctl = control.New(sim.NewPump("pump"), control.Config{}, shelf.ControlEvents{S: svc}, log)
+		svc.OnTarget = ctl.SetTarget
+	}
 	_, handler := New(Deps{
-		Store: st, Monitor: mon, Shelf: svc, Photos: ph, Hub: hub, ClockSynced: func() bool { return true },
+		Store: st, Monitor: mon, Shelf: svc, Control: ctl, Photos: ph, Hub: hub, ClockSynced: func() bool { return true },
 		Web:     fstest.MapFS{"index.html": {Data: []byte("<html>app</html>")}, "assets/app-1234.js": {Data: []byte("js")}},
 		TempDir: dir, Version: "test", Commit: "abc", StartedAt: time.Now(), Log: log,
 	})
@@ -154,7 +163,11 @@ func TestHealthReferenceStatusShapes(t *testing.T) {
 	wantKeys(t, "room", body["room"].(map[string]any), "humidity_pct", "temperature_c", "vpd_kpa", "state", "read_at")
 	wantKeys(t, "sensor", body["sensors"].([]any)[0].(map[string]any), "sensor", "state", "humidity_pct", "temperature_c", "offset_pct", "read_at", "age_seconds", "failing_since", "last_error")
 	wantKeys(t, "trim", body["trim"].(map[string]any), "ready_now_count", "ready_now_until", "check_count", "late_count", "next_visit")
-	if body["control"] != nil || body["room"].(map[string]any)["state"] != "ok" {
+	wantKeys(t, "control", body["control"].(map[string]any), "target_humidity_pct", "set_at", "min_pct", "max_pct", "controller", "pump", "safety", "limits")
+	if body["control"].(map[string]any)["controller"] != false || body["control"].(map[string]any)["pump"] != nil {
+		t.Errorf("control without a pump = %v", body["control"])
+	}
+	if body["room"].(map[string]any)["state"] != "ok" {
 		t.Errorf("status = %v", body)
 	}
 }
@@ -168,8 +181,11 @@ func TestRoutingAndErrors(t *testing.T) {
 	}{
 		{"GET", "/api/v1/nope", "", 404, "not_found"},
 		{"DELETE", "/api/v1/health", "", 404, "not_found"},
-		{"GET", "/api/v1/control", "", 501, "not_implemented"},
-		{"PUT", "/api/v1/control/setpoint", "{}", 501, "not_implemented"},
+		{"POST", "/api/v1/control/override", `{"seconds":5}`, 409, "no_pump"},
+		{"POST", "/api/v1/control/reset", "", 409, "no_pump"},
+		{"PUT", "/api/v1/control/setpoint", "{}", 422, "validation_failed"},
+		{"PUT", "/api/v1/control/setpoint", `{"target_humidity_pct":30}`, 422, "validation_failed"},
+		{"GET", "/api/v1/control/preview?target_humidity_pct=x", "", 400, "bad_request"},
 		{"GET", "/api/v1/pieces/abc", "", 404, "not_found"},
 		{"GET", "/api/v1/pieces/42", "", 404, "not_found"},
 		{"POST", "/api/v1/pieces", "{", 400, "bad_request"},
@@ -305,6 +321,77 @@ func TestPiecesAndObservationsFlow(t *testing.T) {
 		t.Fatal(code)
 	}
 	wantKeys(t, "shelf", body, "computed_at", "items", "next_visit", "check_these")
+}
+
+func TestControlTarget(t *testing.T) {
+	h := newHarness(t)
+	code, body := h.do("GET", "/api/v1/control", "")
+	if code != 200 || body["target_humidity_pct"] != nil {
+		t.Fatalf("initial control: %d %v", code, body)
+	}
+	code, body = h.do("PUT", "/api/v1/control/setpoint", `{"target_humidity_pct":82.04}`)
+	if code != 200 || body["target_humidity_pct"] != 82.0 || body["set_at"] == nil {
+		t.Fatalf("set: %d %v", code, body)
+	}
+	code, body = h.do("GET", "/api/v1/control/preview?target_humidity_pct=90", "")
+	if code != 200 || body["target_humidity_pct"] != 90.0 {
+		t.Fatalf("preview: %d %v", code, body)
+	}
+	wantKeys(t, "preview", body, "target_humidity_pct", "forecast_temp_c", "next_visit", "ready_now_count")
+	// The preview saved nothing.
+	if _, body = h.do("GET", "/api/v1/control", ""); body["target_humidity_pct"] != 82.0 {
+		t.Errorf("after preview: %v", body)
+	}
+	code, body = h.do("PUT", "/api/v1/control/setpoint", `{"target_humidity_pct":null}`)
+	if code != 200 || body["target_humidity_pct"] != nil {
+		t.Fatalf("clear: %d %v", code, body)
+	}
+	_, body = h.do("GET", "/api/v1/climate-log?from=-1h", "")
+	n := 0
+	for _, e := range body["items"].([]any) {
+		if e.(map[string]any)["kind"] == "setpoint_set" {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Errorf("setpoint_set entries = %d, want 2: %v", n, body)
+	}
+}
+
+func TestControlPump(t *testing.T) {
+	h := newHarnessWith(t, true)
+	_, body := h.do("GET", "/api/v1/health", "")
+	if body["features"].(map[string]any)["control"] != true {
+		t.Errorf("features = %v", body["features"])
+	}
+	code, body := h.do("GET", "/api/v1/control", "")
+	if code != 200 || body["controller"] != true {
+		t.Fatalf("control: %d %v", code, body)
+	}
+	wantKeys(t, "pump", body["pump"].(map[string]any), "name", "on", "since", "reason", "rest_until", "runtime_24h_seconds", "last_run_at", "error")
+	wantKeys(t, "safety", body["safety"].(map[string]any), "tripped", "reason", "since")
+	if body["pump"].(map[string]any)["reason"] != "no_target" {
+		t.Errorf("pump = %v", body["pump"])
+	}
+
+	if code, body = h.do("POST", "/api/v1/control/override", `{"seconds":600}`); code != 422 {
+		t.Errorf("long manual run: %d %v", code, body)
+	}
+	code, body = h.do("POST", "/api/v1/control/override", `{"seconds":5}`)
+	if code != 200 || body["pump"].(map[string]any)["on"] != true || body["pump"].(map[string]any)["reason"] != "manual" {
+		t.Fatalf("manual: %d %v", code, body)
+	}
+	code, body = h.do("DELETE", "/api/v1/control/override", "")
+	if code != 200 || body["pump"].(map[string]any)["on"] != false {
+		t.Fatalf("stop: %d %v", code, body)
+	}
+	if code, _ = h.do("POST", "/api/v1/control/reset", ""); code != 200 {
+		t.Errorf("reset: %d", code)
+	}
+	_, body = h.do("GET", "/api/v1/climate-log?from=-1h", "")
+	if items := body["items"].([]any); len(items) != 1 || items[0].(map[string]any)["kind"] != "pump_manual" {
+		t.Errorf("log = %v", items)
+	}
 }
 
 func TestSettingsAndClimate(t *testing.T) {

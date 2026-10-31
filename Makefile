@@ -12,13 +12,13 @@ STUDIO_TZ ?= Europe/Bucharest
 
 .PHONY: dev test build build-pi web clean
 
-# The backend with the simulated sensor and demo data on ./data/dev.db, and
+# The backend with the simulated sensor and pump and demo data on ./data/dev.db, and
 # the Vite dev server (it proxies /api to :8080). Ctrl-C stops both.
 # Delete ./data to reseed.
 dev:
 	@mkdir -p data
 	@trap 'kill 0' INT TERM EXIT; \
-	SENSOR_DRIVER=sim DEMO_SEED=$(DEMO_SEED) STUDIO_TZ=$(STUDIO_TZ) \
+	SENSOR_DRIVER=sim PUMP_DRIVER=sim DEMO_SEED=$(DEMO_SEED) STUDIO_TZ=$(STUDIO_TZ) \
 	DB_PATH=./data/dev.db PHOTO_DIR=./data/photos BACKUP_DIR=./data/backups \
 	go run ./cmd/humidity & \
 	npm --prefix web run dev & \

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"humidity/internal/control"
 	"humidity/internal/photos"
 	"humidity/internal/recorder"
 	"humidity/internal/shelf"
@@ -352,6 +353,110 @@ func (s *Server) patchSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, err := s.Shelf.UpdateSettings(r.Context(), p)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+// --- control ---
+
+// controlBody is GET /control: the target, and the pump when there is one.
+type controlBody struct {
+	shelf.ControlView
+	Controller bool                 `json:"controller"`
+	Pump       *control.PumpState   `json:"pump"`
+	Safety     *control.SafetyState `json:"safety"`
+	Limits     *control.Limits      `json:"limits"`
+}
+
+func (s *Server) controlBody(v shelf.ControlView) controlBody {
+	out := controlBody{ControlView: v}
+	if s.Control != nil {
+		st := s.Control.State()
+		out.Controller, out.Pump, out.Safety, out.Limits = true, &st.Pump, &st.Safety, &st.Limits
+	}
+	return out
+}
+
+func (s *Server) getControl(w http.ResponseWriter, r *http.Request) {
+	v, err := s.Shelf.Control(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.controlBody(v))
+}
+
+// withPump runs fn with the controller, or answers 409 without a pump.
+func (s *Server) withPump(fn func(w http.ResponseWriter, r *http.Request, c *control.Controller)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.Control == nil {
+			writeError(w, http.StatusConflict, "no_pump", "no pump is configured (PUMP_DRIVER=none)")
+			return
+		}
+		fn(w, r, s.Control)
+	}
+}
+
+// override runs the pump by hand for {"seconds": n}.
+func (s *Server) override(w http.ResponseWriter, r *http.Request, c *control.Controller) {
+	var body struct {
+		Seconds *float64 `json:"seconds"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	limit := c.State().Limits.MaxManualSeconds
+	if body.Seconds == nil || *body.Seconds < 1 || *body.Seconds > float64(limit) {
+		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "invalid manual run",
+			shelf.FieldError{Field: "seconds", Code: shelf.CodeOutOfRange, Message: fmt.Sprintf("must be between 1 and %d", limit)})
+		return
+	}
+	if err := c.Manual(time.Duration(*body.Seconds * float64(time.Second))); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "pump_failed", "the pump switch failed; check the wiring and the logs")
+		return
+	}
+	s.getControl(w, r)
+}
+
+func (s *Server) stopPump(w http.ResponseWriter, r *http.Request, c *control.Controller) {
+	c.Stop()
+	s.getControl(w, r)
+}
+
+func (s *Server) resetPump(w http.ResponseWriter, r *http.Request, c *control.Controller) {
+	c.Reset()
+	s.getControl(w, r)
+}
+
+func (s *Server) putSetpoint(w http.ResponseWriter, r *http.Request) {
+	var p shelf.SetpointPatch
+	if !decodeJSON(w, r, &p) {
+		return
+	}
+	v, err := s.Shelf.SetTarget(r.Context(), p)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.controlBody(v))
+}
+
+// previewControl plans with ?target_humidity_pct= (empty or absent: no
+// target) without saving it.
+func (s *Server) previewControl(w http.ResponseWriter, r *http.Request) {
+	target := shelf.Opt[float64]{Set: true, Null: true}
+	if q := r.URL.Query().Get("target_humidity_pct"); q != "" {
+		pct, err := strconv.ParseFloat(q, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", "target_humidity_pct must be a number")
+			return
+		}
+		target = shelf.Opt[float64]{Set: true, V: pct}
+	}
+	v, err := s.Shelf.Preview(r.Context(), target)
 	if err != nil {
 		s.fail(w, r, err)
 		return

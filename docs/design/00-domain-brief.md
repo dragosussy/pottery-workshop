@@ -24,8 +24,8 @@ far:
   development).
 - `internal/monitor`: polls every sensor every `POLL_INTERVAL` (5s by default)
   and keeps the latest reading per sensor in memory.
-- No HTTP server, no persistence and no control loop yet. A
-  humidifier/pump control loop is planned.
+- (Since then: the HTTP server, persistence and the pump control loop were
+  built; see the backend plan.)
 
 ## Users and context
 
@@ -62,7 +62,9 @@ far:
   which are far more accurate than the DHT22 in that range, plus a
   calibration offset set with a salt test.
 - No fan, and only one clay body.
-- Later, a controller holds one **global humidity target** for the shelf.
+- One **global humidity target** for the shelf, set in the app. A **pump**
+  (misting, switched by a relay on a Pi GPIO pin) holds it; it can only add
+  moisture. Predictions assume the shelf holds the target.
 
 ## Core concepts
 

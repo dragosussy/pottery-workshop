@@ -175,7 +175,7 @@ func (s *Service) Observe(ctx context.Context, in NewObservations) (Created, err
 	if err != nil {
 		return Created{}, err
 	}
-	climate := predict.NewClimate(s.dose, at)
+	climate := s.climate(pl, at)
 
 	var out Created
 	var created []store.Observation

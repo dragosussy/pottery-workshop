@@ -3,7 +3,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 
-export type SheetName = 'add' | 'observe' | 'flip' | 'trim' | 'discard' | 'edit'
+export type SheetName = 'add' | 'observe' | 'flip' | 'trim' | 'discard' | 'edit' | 'target'
 
 let pushedBySheet = false
 

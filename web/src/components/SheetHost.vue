@@ -8,6 +8,7 @@ import TrimSheet from '@/sheets/TrimSheet.vue'
 import DiscardSheet from '@/sheets/DiscardSheet.vue'
 import ObserveSheet from '@/sheets/ObserveSheet.vue'
 import EditPieceSheet from '@/sheets/EditPieceSheet.vue'
+import TargetSheet from '@/sheets/TargetSheet.vue'
 
 const sheet = useSheet()
 const q = sheet.query
@@ -26,4 +27,5 @@ const close = () => sheet.close()
   <DiscardSheet v-else-if="sheet.current.value === 'discard'" :key="key" :ids="sheet.ids.value" @close="close" @done="close" />
   <ObserveSheet v-else-if="sheet.current.value === 'observe'" :key="key" :ids="sheet.ids.value" :obs-id="obs" @close="close" @done="close" />
   <EditPieceSheet v-else-if="sheet.current.value === 'edit'" :key="key" :ids="sheet.ids.value" :focus="focus" @close="close" @done="close" />
+  <TargetSheet v-else-if="sheet.current.value === 'target'" @close="close" @done="close" />
 </template>

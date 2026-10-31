@@ -41,7 +41,15 @@ export type CheckReason =
   | 'stale_observation'
 export type SensorState = 'ok' | 'stale' | 'no_data'
 export type RoomState = 'ok' | 'stale' | 'no_data'
-export type ClimateLogKind = 'offline' | 'sensor_gap' | 'sensor_calibrated' | 'sensor_replaced' | 'setpoint_set'
+export type ClimateLogKind =
+  | 'offline'
+  | 'sensor_gap'
+  | 'sensor_calibrated'
+  | 'sensor_replaced'
+  | 'setpoint_set'
+  | 'pump_manual'
+  | 'pump_tripped'
+  | 'pump_reset'
 export type LearningState = 'learning' | 'learned'
 export type ForecastBasis = 'recent' | 'setpoint'
 export type BasisMethod = 'prior' | 'learned'
@@ -158,7 +166,7 @@ export interface LiveStatus {
   trim: TrimSummary
   learning: Learning
   last_offline: OfflinePeriod | null
-  control: ControlState | null
+  control: ControlState
 }
 
 // ---------------------------------------------------------------------------
@@ -283,7 +291,10 @@ export type ClimateLogEntry =
   | ClimateLogBase<'sensor_gap', { sensor: string; from: Timestamp; to: Timestamp }>
   | ClimateLogBase<'sensor_calibrated', { sensor: string; offset_pct: number; previous_offset_pct: number }>
   | ClimateLogBase<'sensor_replaced', { sensor: string }>
-  | ClimateLogBase<'setpoint_set', { target_humidity_pct: number }>
+  | ClimateLogBase<'setpoint_set', { target_humidity_pct: number | null; previous_pct: number | null }>
+  | ClimateLogBase<'pump_manual', { seconds: number }>
+  | ClimateLogBase<'pump_tripped', { reason: string; pulses: number }>
+  | ClimateLogBase<'pump_reset', { reason: string }>
 
 // ---------------------------------------------------------------------------
 // §3.6 Photos
@@ -446,7 +457,7 @@ export interface StreamReadings {
   sensors: SensorStatus[]
 }
 
-export type ChangeScope = 'pieces' | 'observations' | 'predictions' | 'settings' | 'climate_log'
+export type ChangeScope = 'pieces' | 'observations' | 'predictions' | 'settings' | 'climate_log' | 'control'
 
 export interface StreamChanged {
   scopes: ChangeScope[]
@@ -454,22 +465,61 @@ export interface StreamChanged {
 }
 
 // ---------------------------------------------------------------------------
-// §6 Control (FUTURE; declared, not used in v1)
+// §6 Control: the humidity target, and the pump that holds it (controller
+// false: no pump configured). Predictions assume the shelf sits at the target.
 // ---------------------------------------------------------------------------
 
-export interface Actuator {
-  id: string
-  kind: string
-  state: 'on' | 'off'
-  since: Timestamp
-  override_until: Timestamp | null
+export type PumpReason =
+  | 'below_target'
+  | 'manual'
+  | 'resting'
+  | 'at_target'
+  | 'no_target'
+  | 'no_sensor_data'
+  | 'above_max'
+  | 'tripped'
+  | 'switch_error'
+
+export interface PumpState {
+  name: string
+  on: boolean
+  since: Timestamp | null
+  reason: PumpReason
+  rest_until: Timestamp | null
+  runtime_24h_seconds: number
+  last_run_at: Timestamp | null
+  error: string | null
+}
+
+export interface PumpSafety {
+  tripped: boolean
+  reason: 'not_rising' | null
+  since: Timestamp | null
+}
+
+export interface PumpLimits {
+  pulse_seconds: number
+  rest_seconds: number
+  hysteresis_pct: number
+  max_rh_pct: number
+  max_manual_seconds: number
 }
 
 export interface ControlState {
-  mode: string
-  target_humidity_pct: number
-  hysteresis_pct: number
-  actuators: Actuator[]
-  holding: boolean
-  safety: { tripped: boolean; reason: string | null }
+  target_humidity_pct: number | null
+  set_at: Timestamp | null
+  min_pct: number
+  max_pct: number
+  controller: boolean
+  pump: PumpState | null
+  safety: PumpSafety | null
+  limits: PumpLimits | null
+}
+
+/** GET /control/preview: the visit the shelf would get with this target (nothing saved). */
+export interface ControlPreview {
+  target_humidity_pct: number | null
+  forecast_temp_c: number
+  next_visit: Visit | null
+  ready_now_count: number
 }

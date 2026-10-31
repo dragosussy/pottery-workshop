@@ -87,6 +87,19 @@ back button closes them.
 2. **Climate card.** The room's humidity in large type, the temperature, a
    6 h sparkline and a freshness dot. Tapping it opens `/climate`. It shows a
    stale state when no sensor is `ok`.
+   - **Target row** under it: "Target **82%** · on target", or "· shelf 5%
+     below" when the shelf is more than 3 points off, or "none · predictions
+     follow the last day". Tapping it opens the **target sheet**:
+     - a precise `HumiditySlider`: 50–98 %, 1 % steps, fine scrubbing and
+       ± nudges like the `DrynessSlider`, and a ring at the shelf's humidity
+       now;
+     - a live preview of the trim card with that target ("With 86 %: Come Sat
+       09:00–11:30 · 5 ready"), from `GET /control/preview`, debounced while
+       dragging. The potter raises the target until the visit lands on a day
+       that suits them;
+     - `Set 86%`, plus `No target` to clear it;
+     - a note on how the pump holds the target (pulse, rest, only adds
+       moisture), or, without a pump, that the potter holds it by hand.
 3. **Trim card**, the main element. Its states (`mid-batch-changes.md`
    §7.3):
 
@@ -240,6 +253,12 @@ still allows corrections and "Back on the shelf".
 
 - **Time zone**, pre-filled with the phone's. It is only used to show times.
   There is no studio schedule: the potter goes whenever they want.
+- **Pump:** running or off and why ("waiting for the mist to settle"), the
+  runtime over the last 24 h, `Run 5 s` / `Stop` for checking the wiring and
+  priming after a refill, the limits in words, and `Resume` after a safety
+  stop. Without a pump: how to configure one. A safety stop also shows a red
+  banner on Now with `Resume`, and the target row adds "· pump running" or
+  "· pump stopped".
 - **Colours (trying out):** a palette picker (Tide, Sage, Cobalt, Kiln), kept
   per device. `?palette=name` in the URL also switches it. It's temporary,
   until one palette sticks (§5.3).

@@ -159,7 +159,7 @@ func (s *Service) views(ctx context.Context, pieces []store.Piece) ([]PieceView,
 	for _, p := range pieces {
 		pred, ok := pl.out.Predictions[p.ID]
 		if !ok {
-			climate := predict.NewClimate(s.dose, pl.out.ComputedAt)
+			climate := s.climate(pl, pl.out.ComputedAt)
 			pred = pl.model.Live(modelPiece(p, obs[p.ID], false), climate, pl.lc)
 		}
 		out = append(out, pieceView(p, obs[p.ID], sizes, pred, pl.out.ComputedAt))

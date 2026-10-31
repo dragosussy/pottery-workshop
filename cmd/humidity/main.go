@@ -1,4 +1,4 @@
-// Command humidity monitors (and, later, controls) the humidity of the
+// Command humidity monitors and controls (with a pump) the humidity of the
 // pottery drying space, records its climate, tracks the pieces drying on the
 // shelf, and serves the API and the web app.
 package main
@@ -21,6 +21,7 @@ import (
 
 	"humidity/internal/api"
 	"humidity/internal/config"
+	"humidity/internal/control"
 	"humidity/internal/demo"
 	"humidity/internal/monitor"
 	"humidity/internal/photos"
@@ -48,7 +49,7 @@ func main() {
 
 func run(log *slog.Logger, level *slog.LevelVar) error {
 	// docker stop and the Pi's power button send SIGTERM; handle it so the
-	// recorder flushes the open minute (later: the pump switches off).
+	// recorder flushes the open minute and the pump switches off.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	startedAt := time.Now()
@@ -116,8 +117,31 @@ func run(log *slog.Logger, level *slog.LevelVar) error {
 	streamCycles, cancelStream := mon.Subscribe(4)
 	defer cancelStream()
 
+	// The pump: off from the moment it is opened, and on shutdown.
+	sw, err := openPump(cfg.Pump, sensors)
+	if err != nil {
+		return err
+	}
+	var ctl *control.Controller
+	if sw != nil {
+		defer sw.Close()
+		ctl = control.New(sw, controlConfig(cfg.Pump), shelf.ControlEvents{S: svc}, log)
+		target, err := svc.Target(ctx)
+		if err != nil {
+			return fmt.Errorf("target: %w", err)
+		}
+		ctl.SetTarget(target)
+		svc.OnTarget = ctl.SetTarget
+	}
+	var ctlCycles <-chan monitor.Cycle
+	if ctl != nil {
+		var cancelCtl func()
+		ctlCycles, cancelCtl = mon.Subscribe(4)
+		defer cancelCtl()
+	}
+
 	srv, handler := api.New(api.Deps{
-		Store: st, Monitor: mon, Shelf: svc, Photos: ph, Hub: hub,
+		Store: st, Monitor: mon, Shelf: svc, Control: ctl, Photos: ph, Hub: hub,
 		ClockSynced: rec.ClockSynced, Web: web.Dist(), TempDir: filepath.Dir(cfg.DBPath),
 		Version: version, Commit: commit, BuiltAt: builtAt, StartedAt: startedAt, Log: log,
 	})
@@ -134,6 +158,7 @@ func run(log *slog.Logger, level *slog.LevelVar) error {
 	log.Info("started",
 		"version", version,
 		"driver", cfg.Driver,
+		"pump", cfg.Pump.Driver,
 		"sensors", len(sensors),
 		"interval", cfg.PollInterval,
 		"addr", cfg.HTTPAddr,
@@ -144,6 +169,9 @@ func run(log *slog.Logger, level *slog.LevelVar) error {
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return mon.Run(gctx) })
 	g.Go(func() error { return rec.Run(gctx, recCycles) })
+	if ctl != nil {
+		g.Go(func() error { return ctl.Run(gctx, ctlCycles) })
+	}
 	g.Go(func() error { return srv.RunStream(gctx, streamCycles) })
 	g.Go(func() error { return backups.RunDaily(gctx) })
 	g.Go(func() error { return ph.RunCleanup(gctx) })

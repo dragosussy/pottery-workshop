@@ -148,7 +148,7 @@ deletes.
 | GET | `/settings` | Studio time zone, days and hours, sensor offsets |
 | PATCH | `/settings` | Change them |
 | GET | `/backup` | Download a fresh database snapshot |
-| GET/PUT/POST/DELETE | `/control…` | FUTURE: setpoint, actuators (501 in v1) |
+| GET/PUT/POST/DELETE | `/control…` | The humidity target and the pump (§6) |
 
 ### Screen → calls
 
@@ -404,7 +404,10 @@ oldest first:
 | `sensor_gap` | `{ "sensor", "from", "to" }` | The recorder, when a sensor fails for more than 1 h while running |
 | `sensor_calibrated` | `{ "sensor", "offset_pct", "previous_offset_pct" }` | `PATCH /settings` |
 | `sensor_replaced` | `{ "sensor" }` | `PATCH /settings` |
-| `setpoint_set` | `{ "target_humidity_pct" }` | FUTURE: the controller |
+| `setpoint_set` | `{ "target_humidity_pct", "previous_pct" }` | The humidity target changed (`null`: cleared) |
+| `pump_manual` | `{ "seconds" }` | A manual pump run |
+| `pump_tripped` | `{ "reason", "pulses" }` | The pump stopped for safety |
+| `pump_reset` | `{ "reason" }` | Resumed after a trip |
 
 ### 3.5 Piece state changes (lifecycle)
 
@@ -687,28 +690,54 @@ Every write triggers recomputation and a `changed` event.
 
 ---
 
-## 6. Humidity control surface: FUTURE (not v1)
+## 6. Humidity target (v1) and actuator control (FUTURE)
 
-In v1 these routes return **501**, `health.features.control` is `false`, and
-`status.control` is `null`.
+The **humidity target** is part of v1 (owner decision 2026-10-31), and so is
+the **pump** that holds it (backend plan §10.1). Without a pump
+(`PUMP_DRIVER=none`: `controller: false`, `pump`, `safety` and `limits`
+null) the potter keeps the shelf near the target by hand. While a target is set, predictions assume
+the shelf sits at it from now on: the forecast rate is the VPD at the target
+and the mean temperature of the last 24 h (`forecast_basis: "setpoint"`). The
+measured dose up to now is unchanged. Without a target, the forecast follows
+the recent climate (`"recent"`). `status.control` carries the same body as
+`GET /control`:
 
 ```json
 {
-  "mode": "auto",
-  "target_humidity_pct": 80.0,
-  "hysteresis_pct": 3.0,
-  "actuators": [ { "id": "humidifier", "kind": "humidifier", "state": "on", "since": "2026-10-30T13:50:00Z", "override_until": null } ],
-  "holding": true,
-  "safety": { "tripped": false, "reason": null }
+  "target_humidity_pct": 82.0,
+  "set_at": "2026-10-31T17:40:00Z",
+  "min_pct": 50,
+  "max_pct": 98,
+  "controller": true,
+  "pump": {
+    "name": "pump", "on": false, "since": "2026-10-31T17:52:10Z",
+    "reason": "resting", "rest_until": "2026-10-31T17:55:10Z",
+    "runtime_24h_seconds": 140, "last_run_at": "2026-10-31T17:52:00Z", "error": null
+  },
+  "safety": { "tripped": false, "reason": null, "since": null },
+  "limits": {
+    "pulse_seconds": 10, "rest_seconds": 180, "hysteresis_pct": 2,
+    "max_rh_pct": 95, "max_manual_seconds": 60
+  }
 }
 ```
 
+`pump.reason`: `below_target` (running), `manual` (running by hand),
+`resting`, `at_target`, `no_target`, `no_sensor_data`, `above_max`,
+`tripped`, `switch_error`. `safety.reason`: `not_rising`.
+Pump state changes emit `changed` with scope `control`.
+
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/control` | Mode, setpoint, actuator states |
-| PUT | `/control/setpoint` | Change the **global** setpoint. Logs `setpoint_set`, and predictions switch to `forecast_basis: "setpoint"`. |
-| POST | `/control/override` | A time-limited manual override |
-| DELETE | `/control/override?actuator=` | Cancel the override |
+| GET | `/control` | The target (`null` when none) |
+| PUT | `/control/setpoint` | `{ "target_humidity_pct": 82 }` sets the target (50–98, rounded to 0.1), `null` clears it. Logs `setpoint_set` `{ target_humidity_pct, previous_pct }` when it changes, and emits `changed` with `control`, `predictions` and `climate_log`. |
+| GET | `/control/preview?target_humidity_pct=86` | Saves nothing. Plans the shelf as if the target were 86 (absent: no target) and returns `{ target_humidity_pct, forecast_temp_c, next_visit, ready_now_count }`. `next_visit` has the `/shelf` shape. |
+| POST | `/control/override` | `{ "seconds": 5 }` runs the pump by hand now (1 to `max_manual_seconds`), whatever the target, humidity or trip. Logs `pump_manual`. |
+| DELETE | `/control/override` | Stops the pump now; the controller rests before deciding again |
+| POST | `/control/reset` | Clears a safety trip (logs `pump_reset`) |
+
+Without a pump, the three pump routes answer **409** `no_pump`.
+`health.features.control` is `true` when a pump is configured.
 
 ---
 

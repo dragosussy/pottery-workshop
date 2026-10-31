@@ -3,6 +3,8 @@ import { API_BASE, http, request } from './client'
 import type {
   AddPieces,
   ClimateLogEntry,
+  ControlPreview,
+  ControlState,
   Health,
   Items,
   LiveStatus,
@@ -54,6 +56,17 @@ export const api = {
 
   settings: () => http.get<Settings>('/settings'),
   patchSettings: (body: SettingsPatch) => http.patch<Settings>('/settings', body),
+
+  control: () => http.get<ControlState>('/control'),
+  /** null clears the target. */
+  setTarget: (pct: number | null) => http.put<ControlState>('/control/setpoint', { target_humidity_pct: pct }),
+  previewTarget: (pct: number | null, signal?: AbortSignal) =>
+    http.get<ControlPreview>('/control/preview', pct === null ? {} : { target_humidity_pct: pct }, signal),
+  /** Run the pump by hand (testing the wiring, priming after a refill). */
+  runPump: (seconds: number) => http.post<ControlState>('/control/override', { seconds }),
+  stopPump: () => http.del<ControlState>('/control/override'),
+  /** Clear a safety trip. */
+  resetPump: () => http.post<ControlState>('/control/reset', {}),
 }
 
 export const photoUrl = (id: number, size: 'thumb' | 'full' = 'thumb') => `${API_BASE}/photos/${id}?size=${size}`

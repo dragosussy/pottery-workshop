@@ -129,6 +129,13 @@ func TestLoad_Errors(t *testing.T) {
 		{"demo seed unknown value", map[string]string{"SENSOR_DRIVER": "sim", "DEMO_SEED": "maybe"}},
 		{"bad clock check", map[string]string{"CLOCK_CHECK": "maybe"}},
 		{"bad log level", map[string]string{"LOG_LEVEL": "chatty"}},
+		{"unknown pump driver", map[string]string{"PUMP_DRIVER": "steam"}},
+		{"sim pump with real sensors", map[string]string{"PUMP_DRIVER": "sim"}},
+		{"gpio pump without line", map[string]string{"PUMP_DRIVER": "gpio", "PUMP_ACTIVE_LOW": "true"}},
+		{"gpio pump without polarity", map[string]string{"PUMP_DRIVER": "gpio", "PUMP_GPIO_LINE": "17"}},
+		{"gpio line out of range", map[string]string{"PUMP_DRIVER": "gpio", "PUMP_GPIO_LINE": "99", "PUMP_ACTIVE_LOW": "true"}},
+		{"pump pulse too long", map[string]string{"PUMP_PULSE": "5m"}},
+		{"pump max rh too high", map[string]string{"PUMP_MAX_RH": "100"}},
 	}
 
 	for _, tc := range tests {
@@ -137,5 +144,22 @@ func TestLoad_Errors(t *testing.T) {
 				t.Error("Load() succeeded, want error")
 			}
 		})
+	}
+}
+
+func TestLoad_Pump(t *testing.T) {
+	cfg, err := Load(env(map[string]string{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Pump.Driver != "none" || cfg.Pump.Pulse != 10*time.Second || cfg.Pump.Rest != 3*time.Minute || cfg.Pump.MaxRH != 95 {
+		t.Errorf("defaults = %+v", cfg.Pump)
+	}
+	cfg, err = Load(env(map[string]string{"PUMP_DRIVER": "gpio", "PUMP_GPIO_LINE": "17", "PUMP_ACTIVE_LOW": "true", "PUMP_PULSE": "15s"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Pump.Line != 17 || !cfg.Pump.ActiveLow || cfg.Pump.Pulse != 15*time.Second {
+		t.Errorf("gpio = %+v", cfg.Pump)
 	}
 }

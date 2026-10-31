@@ -7,6 +7,8 @@
 
 import type {
   ClimateLogEntry,
+  ControlState,
+  PumpReason,
   FormKey,
   Health,
   LiveStatus,
@@ -69,6 +71,9 @@ export interface MockWorld {
   speed: Map<number, number>
   followUpsAsked: Set<number>
   seq: { piece: number; obs: number; photo: number; log: number }
+  target: { pct: number; setAt: number } | null
+  /** The simulated pump: running by hand until manualUntil. */
+  pump: { manualUntil: number; lastRunAt: number | null; runtime: number; tripped: boolean }
 }
 
 // ---------------------------------------------------------------------------
@@ -86,6 +91,8 @@ export function baseSettings(over: Partial<Settings> = {}): Settings {
 function emptyWorld(now: number, settings: Settings): MockWorld {
   return {
     version: '0.4.0-mock',
+    target: null,
+    pump: { manualUntil: 0, lastRunAt: null, runtime: 0, tripped: false },
     startedAt: now - 6 * H,
     settings,
     pieces: [],
@@ -382,7 +389,42 @@ export function statusOf(w: MockWorld, now: number): LiveStatus {
     },
     learning: { state: isLearning(w) ? 'learning' : 'learned', samples: Math.min(w.learningSamples, 5), needed: 5 },
     last_offline: lastOffline,
-    control: null,
+    control: controlOf(w, now),
+  }
+}
+
+export function controlOf(w: MockWorld, now: number = Date.now()): ControlState {
+  const room = w.sensors[0]?.humidity_pct ?? null
+  const manual = w.pump.manualUntil > now
+  const reason: PumpReason = w.pump.tripped
+    ? 'tripped'
+    : manual
+      ? 'manual'
+      : w.target === null
+        ? 'no_target'
+        : room === null
+          ? 'no_sensor_data'
+          : room < w.target.pct - 2
+            ? 'resting'
+            : 'at_target'
+  return {
+    target_humidity_pct: w.target?.pct ?? null,
+    set_at: w.target ? toIso(w.target.setAt) : null,
+    min_pct: 50,
+    max_pct: 98,
+    controller: true,
+    pump: {
+      name: 'pump',
+      on: manual,
+      since: manual && w.pump.lastRunAt ? toIso(w.pump.lastRunAt) : null,
+      reason,
+      rest_until: reason === 'resting' ? toIso(now + 90_000) : null,
+      runtime_24h_seconds: w.pump.runtime,
+      last_run_at: w.pump.lastRunAt === null ? null : toIso(w.pump.lastRunAt),
+      error: null,
+    },
+    safety: w.pump.tripped ? { tripped: true, reason: 'not_rising', since: toIso(now) } : { tripped: false, reason: null, since: null },
+    limits: { pulse_seconds: 10, rest_seconds: 180, hysteresis_pct: 2, max_rh_pct: 95, max_manual_seconds: 60 },
   }
 }
 
@@ -398,7 +440,7 @@ export function healthOf(w: MockWorld, now: number): Health {
     clock_synced: w.clockSynced,
     started_at: toIso(w.startedAt),
     checks: { database: 'ok', sensors: anyOk ? 'ok' : 'degraded' },
-    features: { control: false },
+    features: { control: true },
   }
 }
 

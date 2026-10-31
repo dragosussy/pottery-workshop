@@ -104,7 +104,13 @@ const notes = computed(() =>
       case 'sensor_replaced':
         return `┊ ${e.value.sensor} replaced ${when}`
       case 'setpoint_set':
-        return `Target set to ${e.value.target_humidity_pct}% ${when}`
+        return e.value.target_humidity_pct === null ? `Target cleared ${when}` : `Target set to ${e.value.target_humidity_pct}% ${when}`
+      case 'pump_manual':
+        return `Pump run by hand for ${e.value.seconds} s ${when}`
+      case 'pump_tripped':
+        return `⚠ Pump stopped ${when}: humidity didn't rise after ${e.value.pulses} runs`
+      case 'pump_reset':
+        return `Pump resumed ${when}`
     }
   }),
 )

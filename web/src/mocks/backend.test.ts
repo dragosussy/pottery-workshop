@@ -6,7 +6,7 @@ import { FIXED_NOW, SCENARIOS, snapshot } from './fixtures'
 
 const now = () => FIXED_NOW
 function call(b: ReturnType<typeof createMockBackend>, method: string, path: string, json?: unknown) {
-  const out = b.handle({ method, path, query: new URLSearchParams(path.split('?')[1] ?? ''), json })
+  const out = b.handle({ method, path: path.split('?')[0]!, query: new URLSearchParams(path.split('?')[1] ?? ''), json })
   return { status: out.status, body: out.body ? JSON.parse(out.body as string) : null }
 }
 
@@ -118,6 +118,24 @@ describe('mock backend: lifecycle (contract §3.5)', () => {
     const b = createMockBackend('calibrated', now)
     expect(call(b, 'PATCH', '/settings', { studio_days: ['mon'] }).body.error.fields[0]).toMatchObject({ field: 'studio_days', code: 'unknown_field' })
     expect(call(b, 'PATCH', '/settings', { studio_tz: 'Europe/London' }).body.studio_tz).toBe('Europe/London')
+  })
+
+  it('the humidity target can be set, previewed and cleared', () => {
+    const b = createMockBackend('calibrated', now)
+    expect(call(b, 'GET', '/control').body).toMatchObject({ target_humidity_pct: null, controller: true })
+    expect(call(b, 'PUT', '/control/setpoint', { target_humidity_pct: 30 }).status).toBe(422)
+    expect(call(b, 'PUT', '/control/setpoint', { target_humidity_pct: 84 }).body).toMatchObject({ target_humidity_pct: 84 })
+    expect(call(b, 'GET', '/status').body.control.target_humidity_pct).toBe(84)
+    expect(call(b, 'GET', '/control/preview?target_humidity_pct=90').body).toHaveProperty('next_visit')
+    expect(call(b, 'PUT', '/control/setpoint', { target_humidity_pct: null }).body.target_humidity_pct).toBeNull()
+  })
+
+  it('the pump runs by hand and stops', () => {
+    const b = createMockBackend('calibrated', now)
+    expect(call(b, 'POST', '/control/override', { seconds: 600 }).status).toBe(422)
+    expect(call(b, 'POST', '/control/override', { seconds: 5 }).body.pump).toMatchObject({ on: true, reason: 'manual' })
+    expect(call(b, 'DELETE', '/control/override').body.pump.on).toBe(false)
+    expect(call(b, 'POST', '/control/reset', {}).body.safety.tripped).toBe(false)
   })
 
   it('unknown routes return the JSON 404 envelope', () => {

@@ -12,6 +12,17 @@ type Doser interface {
 	Dose(from, to time.Time) (eff, filled float64)
 }
 
+// Setpoint is a humidity target the forecast assumes the room holds, and
+// the temperature it is expected at (the recent mean).
+type Setpoint struct {
+	RH    float64 // %
+	TempC float64
+}
+
+// DefaultTempC stands in for the forecast temperature when nothing was
+// recorded recently.
+const DefaultTempC = 18.0
+
 // maxHorizon caps forecasts, so a near-zero rate can't overflow a duration.
 const maxHorizon = 3 * 365 * 24 * time.Hour
 
@@ -40,8 +51,20 @@ func NewClimate(d Doser, now time.Time) *Climate {
 // Now returns the time the climate was prepared for.
 func (c *Climate) Now() time.Time { return c.now }
 
-// Basis returns the forecast basis: "recent" (or "setpoint", later).
+// Basis returns the forecast basis: "recent" or "setpoint".
 func (c *Climate) Basis() string { return c.forecast }
+
+// WithSetpoint switches the forecast to a humidity target: from now on the
+// room is assumed to sit at sp.RH at sp.TempC (forecast_basis "setpoint").
+// The measured dose up to now is unchanged.
+func (c *Climate) WithSetpoint(sp *Setpoint) *Climate {
+	if sp == nil {
+		return c
+	}
+	r := EffRate(VPD(sp.TempC, sp.RH))
+	c.rate6, c.rate24, c.forecast = r, r, "setpoint"
+	return c
+}
 
 // Between returns the effective hours from a to b (measured, then
 // forecast), and the filled part of the measured stretch.

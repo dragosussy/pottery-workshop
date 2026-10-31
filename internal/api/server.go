@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"humidity/internal/control"
 	"humidity/internal/monitor"
 	"humidity/internal/photos"
 	"humidity/internal/shelf"
@@ -21,6 +22,7 @@ type Deps struct {
 	Store       *store.Store
 	Monitor     *monitor.Monitor
 	Shelf       *shelf.Service
+	Control     *control.Controller // nil without a pump
 	Photos      *photos.Service
 	Hub         *Hub
 	ClockSynced func() bool
@@ -75,11 +77,12 @@ func New(d Deps) (*Server, http.Handler) {
 	route("GET /api/v1/settings", s.getSettings)
 	route("PATCH /api/v1/settings", s.patchSettings)
 	route("GET /api/v1/backup", s.backup)
-	notImplemented := func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, http.StatusNotImplemented, "not_implemented", "humidity control is not part of v1")
-	}
-	route("/api/v1/control", notImplemented)
-	route("/api/v1/control/", notImplemented)
+	route("GET /api/v1/control", s.getControl)
+	route("PUT /api/v1/control/setpoint", s.putSetpoint)
+	route("GET /api/v1/control/preview", s.previewControl)
+	route("POST /api/v1/control/override", s.withPump(s.override))
+	route("DELETE /api/v1/control/override", s.withPump(s.stopPump))
+	route("POST /api/v1/control/reset", s.withPump(s.resetPump))
 	route("/api/", func(w http.ResponseWriter, r *http.Request) { notFound(w, "no such endpoint") })
 	route("/", s.static)
 

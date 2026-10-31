@@ -15,6 +15,7 @@ type Input struct {
 	Offline    []Interval // oldest first
 	SensorGaps []Interval
 	Loc        *time.Location // studio time zone: slots fall on its :00 and :30
+	Setpoint   *Setpoint      // the humidity target, or nil to forecast from recent climate
 }
 
 // Learning is the learning-period state (api-contract §3.2).
@@ -38,7 +39,7 @@ type Output struct {
 // Plan predicts every piece and plans the next visit.
 func Plan(in Input) Output {
 	model := NewModel(in.Pieces, in.Dose)
-	climate := NewClimate(in.Dose, in.Now)
+	climate := NewClimate(in.Dose, in.Now).WithSetpoint(in.Setpoint)
 	lc := LiveContext{Offline: in.Offline, SensorGaps: in.SensorGaps}
 
 	out := Output{

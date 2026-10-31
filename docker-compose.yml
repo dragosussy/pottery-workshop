@@ -17,6 +17,10 @@ services:
       - "80:8080"
     devices:
       - /dev/i2c-1:/dev/i2c-1   # enable I²C on the Pi first (raspi-config)
+      # The pump relay. On current Pi 5 kernels the header pins are on
+      # gpiochip0 (`gpioinfo` lists it as pinctrl-rp1); older kernels used
+      # gpiochip4: map that one instead.
+      - /dev/gpiochip0:/dev/gpiochip0
     volumes:
       - ./data:/data            # database, photos and backups
     environment:
@@ -32,3 +36,13 @@ services:
       - STUDIO_TZ=Europe/Bucharest   # initial studio time zone; changeable in Settings
       - CLOCK_CHECK=kernel      # "off" if readings never start (clock_synced stays false in /health)
       - LOG_LEVEL=info
+      # The pump. Leave "none" until the relay is wired, then set gpio, the
+      # BCM GPIO number of the relay input and its polarity, and check it
+      # with Settings → Pump → "Run 5 s" before setting a target.
+      - PUMP_DRIVER=none        # none | gpio
+      # - PUMP_GPIO_LINE=17     # BCM GPIO17 = physical pin 11
+      # - PUMP_ACTIVE_LOW=true  # true if the relay switches on when its input is low (most cheap relay boards)
+      # - PUMP_PULSE=10s        # one pump run
+      # - PUMP_REST=3m          # pause after a run, for the mist to reach the sensor
+      # - PUMP_HYSTERESIS=2     # run when the shelf is this many % below the target
+      # - PUMP_MAX_RH=95        # never run at or above this

@@ -3,6 +3,7 @@ module humidity
 go 1.26.4
 
 require (
+	github.com/warthog618/go-gpiocdev v0.9.1
 	golang.org/x/image v0.47.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.49.0

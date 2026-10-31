@@ -45,6 +45,9 @@ type Service struct {
 
 	// Now is the clock; tests replace it.
 	Now func() time.Time
+	// OnTarget, when set, is told about every saved target change (the
+	// pump controller).
+	OnTarget func(pct *float64)
 
 	mu    sync.Mutex
 	cache *plan
@@ -84,6 +87,7 @@ type plan struct {
 	history  map[int64]predict.Piece
 	settings Settings
 	offline  []predict.Interval
+	setpoint *predict.Setpoint
 }
 
 // plan returns the current predictions, recomputing them when a write
@@ -97,7 +101,7 @@ func (s *Service) plan(ctx context.Context) (*plan, error) {
 	}
 	s.mu.Unlock()
 
-	p, err := s.computePlan(ctx, now)
+	p, err := s.computePlan(ctx, now, Opt[float64]{})
 	if err != nil {
 		return nil, err
 	}
@@ -107,9 +111,15 @@ func (s *Service) plan(ctx context.Context) (*plan, error) {
 	return p, nil
 }
 
-func (s *Service) computePlan(ctx context.Context, now time.Time) (*plan, error) {
+// computePlan runs the predictions. target overrides the stored humidity
+// target when set (null: none), for previews.
+func (s *Service) computePlan(ctx context.Context, now time.Time, target Opt[float64]) (*plan, error) {
 	q := s.st.DB()
 	settings, err := s.Settings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	setpoint, err := s.setpoint(ctx, now, target)
 	if err != nil {
 		return nil, err
 	}
@@ -138,6 +148,7 @@ func (s *Service) computePlan(ctx context.Context, now time.Time) (*plan, error)
 		Offline:    offline,
 		SensorGaps: gaps,
 		Loc:        settings.loc(),
+		Setpoint:   setpoint,
 	}
 	for _, p := range pieces {
 		mp := modelPiece(p, obs[p.ID], unknown[p.ID])
@@ -152,7 +163,13 @@ func (s *Service) computePlan(ctx context.Context, now time.Time) (*plan, error)
 		history:  history,
 		settings: settings,
 		offline:  offline,
+		setpoint: setpoint,
 	}, nil
+}
+
+// climate is the dose and forecast as of at, with the plan's setpoint.
+func (s *Service) climate(pl *plan, at time.Time) *predict.Climate {
+	return predict.NewClimate(s.dose, at).WithSetpoint(pl.setpoint)
 }
 
 // modelPiece converts stored rows to the model's view of a piece.

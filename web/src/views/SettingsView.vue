@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Settings (plan §4.9): time zone, sensors (offset + salt test), backup, about.
+// Settings (plan §4.9): time zone, pump, sensors (offset + salt test), backup, about.
 // The studio schedule (days/hours) was removed by owner decision 2026-10-31:
 // the potter can come any time, so only the display time zone remains.
 import { computed, onMounted, ref, watch } from 'vue'
@@ -15,6 +15,7 @@ import { deviceTimeZone, parseTs } from '@/utils/time'
 import { formatDayTime } from '@/utils/format'
 import SensorRow from '@/components/SensorRow.vue'
 import PalettePicker from '@/components/PalettePicker.vue'
+import PumpPanel from '@/components/PumpPanel.vue'
 
 const settings = useSettingsStore()
 const live = useLiveStore()
@@ -117,6 +118,11 @@ const feVersion = __APP_VERSION__
       <button type="button" class="btn btn-primary btn-block" :disabled="saving || !dirty" data-testid="save-tz" @click="saveTz">
         {{ saving ? 'Saving…' : 'Save time zone' }}
       </button>
+    </section>
+
+    <section id="pump" class="card stack" aria-labelledby="pump-h">
+      <h2 id="pump-h" class="section-title">Pump</h2>
+      <PumpPanel />
     </section>
 
     <section class="card stack" aria-labelledby="sensors-h">

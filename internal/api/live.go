@@ -155,7 +155,7 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 		Status: "ok", Version: s.Version, Commit: s.Commit, APIVersion: 1,
 		ServerTime: ts(now), ClockSynced: s.ClockSynced(), StartedAt: ts(s.StartedAt),
 		Checks:   map[string]string{"database": "ok", "sensors": sensorState},
-		Features: map[string]bool{"control": false},
+		Features: map[string]bool{"control": s.Control != nil},
 	}
 	if s.BuiltAt != "" {
 		body.BuiltAt = &s.BuiltAt
@@ -176,7 +176,7 @@ type statusBody struct {
 	Trim                shelf.TrimSummary  `json:"trim"`
 	Learning            shelf.LearningView `json:"learning"`
 	LastOffline         *shelf.OfflineView `json:"last_offline"`
-	Control             *struct{}          `json:"control"`
+	Control             controlBody        `json:"control"`
 }
 
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {
@@ -185,9 +185,15 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	control, err := s.Shelf.Control(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
 	now := s.now()
 	room, sensors := s.climate(s.Monitor.Last(), now)
 	writeJSON(w, http.StatusOK, statusBody{
+		Control:             s.controlBody(control),
 		ServerTime:          ts(now),
 		PollIntervalSeconds: int64(s.Monitor.Interval() / time.Second),
 		StaleAfterSeconds:   int64(s.staleAfter() / time.Second),

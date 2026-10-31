@@ -39,6 +39,21 @@ type Config struct {
 	DemoSeed   string // DemoOff | DemoLearning | DemoCalibrated
 	ClockCheck bool   // wait for the kernel to report the clock synced before recording
 	LogLevel   slog.Level
+
+	Pump PumpConfig
+}
+
+// PumpConfig is the humidifier pump and its controller.
+type PumpConfig struct {
+	Driver    string // none | gpio | sim
+	Chip      string // "" = find the Pi 5 header chip
+	Line      int    // BCM GPIO number on the Pi 5 header
+	ActiveLow bool
+
+	Pulse      time.Duration
+	Rest       time.Duration
+	Hysteresis float64
+	MaxRH      float64
 }
 
 // Load reads configuration using getenv (pass os.Getenv in production).
@@ -60,6 +75,18 @@ type Config struct {
 //	               the clock synced; off: trust the clock (for hosts whose
 //	               time sync doesn't clear STA_UNSYNC)
 //	LOG_LEVEL      debug | info (default) | warn | error
+//
+// The pump (see internal/control):
+//
+//	PUMP_DRIVER         none (default) | gpio | sim (only with SENSOR_DRIVER=sim)
+//	PUMP_GPIO_LINE      BCM GPIO number of the relay input, e.g. 17 (pin 11); required for gpio
+//	PUMP_ACTIVE_LOW     true | false; required for gpio (many relay boards are
+//	                    active-low: their pump runs when the pin is low)
+//	PUMP_GPIO_CHIP      default: the Pi 5 header chip (label pinctrl-rp1)
+//	PUMP_PULSE          one pump run, default 10s
+//	PUMP_REST           pause after a run, default 3m
+//	PUMP_HYSTERESIS     pump when this many % below the target, default 2
+//	PUMP_MAX_RH         never pump at or above this %, default 95
 func Load(getenv func(string) string) (Config, error) {
 	get := func(key, def string) string {
 		if v := getenv(key); v != "" {
@@ -131,7 +158,66 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, fmt.Errorf("LOG_LEVEL: %w", err)
 	}
 
+	cfg.Pump, err = loadPump(get, cfg.Driver)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return cfg, nil
+}
+
+func loadPump(get func(key, def string) string, sensorDriver string) (PumpConfig, error) {
+	p := PumpConfig{Driver: get("PUMP_DRIVER", "none"), Chip: get("PUMP_GPIO_CHIP", "")}
+	switch p.Driver {
+	case "none":
+	case "sim":
+		if sensorDriver != "sim" {
+			return p, fmt.Errorf("PUMP_DRIVER: sim only with SENSOR_DRIVER=sim")
+		}
+	case "gpio":
+		line, err := strconv.Atoi(get("PUMP_GPIO_LINE", ""))
+		if err != nil || line < 0 || line > 53 {
+			return p, fmt.Errorf("PUMP_GPIO_LINE: want the BCM GPIO number of the relay input (e.g. 17), got %q", get("PUMP_GPIO_LINE", ""))
+		}
+		p.Line = line
+		// No default: guessing the polarity wrong runs the pump while the
+		// app thinks it is off.
+		switch v := strings.ToLower(get("PUMP_ACTIVE_LOW", "")); v {
+		case "true", "1", "yes":
+			p.ActiveLow = true
+		case "false", "0", "no":
+		default:
+			return p, fmt.Errorf("PUMP_ACTIVE_LOW: set true or false to match the relay board, got %q", v)
+		}
+	default:
+		return p, fmt.Errorf("PUMP_DRIVER: want none, gpio or sim, got %q", p.Driver)
+	}
+
+	durations := []struct {
+		key, def string
+		dst      *time.Duration
+	}{
+		{"PUMP_PULSE", "10s", &p.Pulse},
+		{"PUMP_REST", "3m", &p.Rest},
+	}
+	for _, d := range durations {
+		v, err := time.ParseDuration(get(d.key, d.def))
+		if err != nil || v <= 0 {
+			return p, fmt.Errorf("%s: want a positive duration, got %q", d.key, get(d.key, d.def))
+		}
+		*d.dst = v
+	}
+	if p.Pulse > 2*time.Minute {
+		return p, fmt.Errorf("PUMP_PULSE: at most 2m, got %s", p.Pulse)
+	}
+	var err error
+	if p.Hysteresis, err = strconv.ParseFloat(get("PUMP_HYSTERESIS", "2"), 64); err != nil || p.Hysteresis < 0.5 || p.Hysteresis > 10 {
+		return p, fmt.Errorf("PUMP_HYSTERESIS: want 0.5-10, got %q", get("PUMP_HYSTERESIS", "2"))
+	}
+	if p.MaxRH, err = strconv.ParseFloat(get("PUMP_MAX_RH", "95"), 64); err != nil || p.MaxRH < 60 || p.MaxRH > 99 {
+		return p, fmt.Errorf("PUMP_MAX_RH: want 60-99, got %q", get("PUMP_MAX_RH", "95"))
+	}
+	return p, nil
 }
 
 // parseSensors parses "shelf:0x44,top:0x45". Addresses may be hex (0x44) or

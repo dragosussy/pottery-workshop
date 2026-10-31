@@ -24,6 +24,7 @@ import {
   lowestFreeNumber,
   onShelf,
   refreshPieceObservations,
+  controlOf,
   shelfOf,
   statusOf,
   withPrediction,
@@ -608,7 +609,59 @@ export function createMockBackend(scenario: ScenarioName = 'calibrated', nowFn: 
       return json(200, st)
     }
 
-    if (path.startsWith('/control')) throw new HttpError(501, 'not_implemented', 'Control is not part of v1')
+    if (method === 'GET' && path === '/control') return json(200, controlOf(world, now))
+    if (method === 'PUT' && path === '/control/setpoint') {
+      const pct = (asObject(req.json) as { target_humidity_pct?: number | null }).target_humidity_pct
+      if (pct === undefined || (pct !== null && (typeof pct !== 'number' || pct < 50 || pct > 98))) {
+        throw new HttpError(422, 'validation_failed', 'Invalid target', [{ field: 'target_humidity_pct', code: 'out_of_range', message: 'must be between 50 and 98' }])
+      }
+      const prev = world.target?.pct ?? null
+      const next = pct === null ? null : Math.round(pct * 10) / 10
+      if (prev !== next) {
+        world.target = next === null ? null : { pct: next, setAt: now }
+        world.climateLog.push({ id: ++world.seq.log, kind: 'setpoint_set', value: { target_humidity_pct: next, previous_pct: prev }, at: toIso(now) })
+        emit(['control', 'predictions', 'climate_log'], [])
+      }
+      return json(200, controlOf(world, now))
+    }
+    if (method === 'GET' && path === '/control/preview') {
+      // The mock has no climate model: a damper target than the room only
+      // shifts the visit later by a rough amount.
+      const pct = q.get('target_humidity_pct') ? Number(q.get('target_humidity_pct')) : null
+      const visit = shelfOf(world, now).next_visit
+      const room = world.sensors[0]?.humidity_pct ?? 80
+      const shiftH = pct === null ? 0 : Math.max(-12, (pct - room) * 1.5)
+      const shift = (iso: string) => toIso(Date.parse(iso) + shiftH * 3_600_000)
+      return json(200, {
+        target_humidity_pct: pct,
+        forecast_temp_c: 18.6,
+        next_visit: visit && { ...visit, start: shift(visit.start), end: shift(visit.end), recommended_at: shift(visit.recommended_at) },
+        ready_now_count: statusOf(world, now).trim.ready_now_count,
+      })
+    }
+    if (method === 'POST' && path === '/control/override') {
+      const seconds = (asObject(req.json) as { seconds?: number }).seconds
+      if (typeof seconds !== 'number' || seconds < 1 || seconds > 60) {
+        throw new HttpError(422, 'validation_failed', 'Invalid manual run', [{ field: 'seconds', code: 'out_of_range', message: 'must be between 1 and 60' }])
+      }
+      world.pump.manualUntil = now + seconds * 1000
+      world.pump.lastRunAt = now
+      world.pump.runtime += seconds
+      world.climateLog.push({ id: ++world.seq.log, kind: 'pump_manual', value: { seconds }, at: toIso(now) })
+      emit(['control', 'climate_log'], [])
+      return json(200, controlOf(world, now))
+    }
+    if (method === 'DELETE' && path === '/control/override') {
+      world.pump.manualUntil = 0
+      emit(['control'], [])
+      return json(200, controlOf(world, now))
+    }
+    if (method === 'POST' && path === '/control/reset') {
+      if (world.pump.tripped) world.climateLog.push({ id: ++world.seq.log, kind: 'pump_reset', value: { reason: 'not_rising' }, at: toIso(now) })
+      world.pump.tripped = false
+      emit(['control', 'climate_log'], [])
+      return json(200, controlOf(world, now))
+    }
     throw new HttpError(404, 'not_found', 'Unknown route')
   }
 
