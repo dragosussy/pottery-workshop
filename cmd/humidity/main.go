@@ -1,191 +1,153 @@
-// Command humidity monitors and controls (with a pump) the humidity of the
-// pottery drying space, records its climate, tracks the pieces drying on the
-// shelf, and serves the API and the web app.
+// Command humidity runs the drying shelf: it reads the humidity sensors,
+// runs the misting pump, keeps the list of pieces and serves the web app.
+// It is configured through the environment; see docs/plan.md §7.
 package main
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
-	_ "time/tzdata" // studio time zones work in a minimal container
-
-	"golang.org/x/sync/errgroup"
-
-	"humidity/internal/api"
-	"humidity/internal/config"
-	"humidity/internal/control"
-	"humidity/internal/demo"
-	"humidity/internal/monitor"
-	"humidity/internal/photos"
-	"humidity/internal/recorder"
-	"humidity/internal/shelf"
-	"humidity/internal/store"
+	"humidity/internal/app"
+	"humidity/internal/hw"
 	"humidity/web"
 )
 
-// Set at build time with -ldflags "-X main.version=… -X main.commit=… -X main.builtAt=…".
-var (
-	version = "dev"
-	commit  = "unknown"
-	builtAt = ""
-)
+const i2cBus = "/dev/i2c-1"
 
 func main() {
-	level := new(slog.LevelVar)
-	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
-	if err := run(log, level); err != nil {
-		log.Error("fatal", "err", err)
-		os.Exit(1)
+	if err := run(); err != nil {
+		log.Fatal(err)
 	}
 }
 
-func run(log *slog.Logger, level *slog.LevelVar) error {
-	// docker stop and the Pi's power button send SIGTERM; handle it so the
-	// recorder flushes the open minute and the pump switches off.
+func run() error {
+	// docker stop and the Pi's power button send SIGTERM: catch it so the
+	// deferred pump-off below runs.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	startedAt := time.Now()
 
-	cfg, err := config.Load(os.Getenv)
+	dataDir := env("DATA_DIR", "/data")
+	pulse, err := time.ParseDuration(env("PUMP_PULSE", "10s"))
 	if err != nil {
-		return fmt.Errorf("config: %w", err)
+		return fmt.Errorf("PUMP_PULSE: %w", err)
 	}
-	level.Set(cfg.LogLevel)
-
-	// Store: a backup before migrations, then migrate.
-	st, err := store.Open(cfg.DBPath)
+	rest, err := time.ParseDuration(env("PUMP_REST", "3m"))
 	if err != nil {
-		return fmt.Errorf("store: %w", err)
+		return fmt.Errorf("PUMP_REST: %w", err)
 	}
-	defer st.Close()
-	backups := &store.Backups{Store: st, Dir: cfg.BackupDir, Keep: cfg.BackupKeep, Log: log, Now: time.Now}
-	if err := backups.AtStartup(ctx); err != nil {
-		return fmt.Errorf("startup backup: %w", err)
-	}
-	if err := st.Migrate(ctx); err != nil {
-		return fmt.Errorf("migrate: %w", err)
-	}
-
-	sensors, err := openSensors(cfg)
+	maxRH, err := strconv.Atoi(env("PUMP_MAX_RH", "95"))
 	if err != nil {
-		return err
-	}
-	defer closeSensors(sensors)
-	names := make([]string, len(cfg.Sensors))
-	for i, s := range cfg.Sensors {
-		names[i] = s.Name
+		return fmt.Errorf("PUMP_MAX_RH: %w", err)
 	}
 
-	mon := monitor.New(sensors, cfg.PollInterval, log)
-	hub := api.NewHub()
-	dose := recorder.NewDoseIndex(time.Now)
-	svc := shelf.New(st, dose, hub, mon, names, cfg.StudioTZ)
-	ph, err := photos.New(st, cfg.PhotoDir, log)
-	if err != nil {
-		return fmt.Errorf("photos: %w", err)
-	}
-
-	if cfg.DemoSeed != config.DemoOff {
-		if err := demo.Seed(ctx, demo.Deps{Store: st, Shelf: svc, Photos: ph, Dose: dose, Sensors: names, Mode: cfg.DemoSeed, Log: log}); err != nil {
-			return fmt.Errorf("demo seed: %w", err)
-		}
-	}
-	if err := dose.Load(ctx, st.DB()); err != nil {
-		return fmt.Errorf("dose index: %w", err)
-	}
-	offsets, err := svc.Offsets(ctx)
-	if err != nil {
-		return fmt.Errorf("offsets: %w", err)
-	}
-	mon.SetOffsets(offsets)
-
-	synced := recorder.ClockSynced
-	if !cfg.ClockCheck {
-		synced = func() bool { return true }
-	}
-	rec := recorder.New(st, dose, hub, synced, log)
-	recCycles, cancelRec := mon.Subscribe(16)
-	defer cancelRec()
-	streamCycles, cancelStream := mon.Subscribe(4)
-	defer cancelStream()
-
-	// The pump: off from the moment it is opened, and on shutdown.
-	sw, err := openPump(cfg.Pump, sensors)
-	if err != nil {
-		return err
-	}
-	var ctl *control.Controller
-	if sw != nil {
-		defer sw.Close()
-		ctl = control.New(sw, controlConfig(cfg.Pump), shelf.ControlEvents{S: svc}, log)
-		target, err := svc.Target(ctx)
+	// The pump first: a sim sensor reacts to the sim pump.
+	var sw hw.Switch
+	var simPump *hw.SimPump
+	switch kind := env("PUMP", "none"); kind {
+	case "none":
+	case "sim":
+		simPump = &hw.SimPump{}
+		sw = simPump
+	case "gpio":
+		pin, err := strconv.Atoi(os.Getenv("PUMP_PIN"))
 		if err != nil {
-			return fmt.Errorf("target: %w", err)
+			return fmt.Errorf("PUMP=gpio needs PUMP_PIN, the BCM GPIO number: %w", err)
 		}
-		ctl.SetTarget(target)
-		svc.OnTarget = ctl.SetTarget
-	}
-	var ctlCycles <-chan monitor.Cycle
-	if ctl != nil {
-		var cancelCtl func()
-		ctlCycles, cancelCtl = mon.Subscribe(4)
-		defer cancelCtl()
-	}
-
-	srv, handler := api.New(api.Deps{
-		Store: st, Monitor: mon, Shelf: svc, Control: ctl, Photos: ph, Hub: hub,
-		ClockSynced: rec.ClockSynced, Web: web.Dist(), TempDir: filepath.Dir(cfg.DBPath),
-		Version: version, Commit: commit, BuiltAt: builtAt, StartedAt: startedAt, Log: log,
-	})
-	httpSrv := &http.Server{
-		Addr:              cfg.HTTPAddr,
-		Handler:           handler,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
-	httpSrv.RegisterOnShutdown(hub.Close)
-
-	log.Info("started",
-		"version", version,
-		"driver", cfg.Driver,
-		"pump", cfg.Pump.Driver,
-		"sensors", len(sensors),
-		"interval", cfg.PollInterval,
-		"addr", cfg.HTTPAddr,
-		"db", cfg.DBPath,
-		"frontend_embedded", web.Embedded,
-	)
-
-	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return mon.Run(gctx) })
-	g.Go(func() error { return rec.Run(gctx, recCycles) })
-	if ctl != nil {
-		g.Go(func() error { return ctl.Run(gctx, ctlCycles) })
-	}
-	g.Go(func() error { return srv.RunStream(gctx, streamCycles) })
-	g.Go(func() error { return backups.RunDaily(gctx) })
-	g.Go(func() error { return ph.RunCleanup(gctx) })
-	g.Go(func() error {
-		if err := httpSrv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			return fmt.Errorf("http: %w", err)
+		// No default: a wrong guess runs the pump while the app shows it off.
+		activeLow, err := strconv.ParseBool(os.Getenv("PUMP_ACTIVE_LOW"))
+		if err != nil {
+			return fmt.Errorf("PUMP=gpio needs PUMP_ACTIVE_LOW=true or false: %w", err)
 		}
-		return nil
-	})
-	g.Go(func() error {
-		<-gctx.Done()
-		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		gpio, err := hw.OpenGPIOPump(pin, activeLow)
+		if err != nil {
+			return err
+		}
+		sw = gpio
+	default:
+		return fmt.Errorf("PUMP must be none, gpio or sim, not %q", kind)
+	}
+	if sw != nil {
+		defer sw.Set(false) // again, whatever happened to the pump loop
+	}
+
+	var addrs []string
+	var sensors []hw.Sensor
+	kind := env("SENSOR", "sht4x")
+	for _, s := range strings.Split(env("SENSOR_ADDRS", "0x44"), ",") {
+		n, err := strconv.ParseUint(strings.TrimSpace(s), 0, 7)
+		if err != nil {
+			return fmt.Errorf("SENSOR_ADDRS: %q is not an I²C address like 0x44", s)
+		}
+		addr := fmt.Sprintf("%#x", n)
+		switch kind {
+		case "sim":
+			sensors = append(sensors, hw.NewSimSensor(simPump))
+		case "sht3x", "sht4x":
+			v := hw.SHT4x
+			if kind == "sht3x" {
+				v = hw.SHT3x
+			}
+			sht, err := hw.OpenSHT(v, i2cBus, uint16(n))
+			if err != nil {
+				return fmt.Errorf("sensor %s: %w", addr, err)
+			}
+			sensors = append(sensors, sht)
+		default:
+			return fmt.Errorf("SENSOR must be sht4x, sht3x or sim, not %q", kind)
+		}
+		addrs = append(addrs, addr)
+	}
+
+	db, err := app.OpenDB(dataDir)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	live, err := app.NewLive(db, addrs)
+	if err != nil {
+		return err
+	}
+	a := &app.App{DB: db, DataDir: dataDir, MaxRH: maxRH, Live: live, Web: web.Dist()}
+
+	var wg sync.WaitGroup
+	if sw != nil {
+		a.Pump = app.NewPump(sw, live, pulse, rest, maxRH)
+		wg.Go(func() { a.Pump.Loop(ctx) })
+	}
+	wg.Go(func() { a.SensorLoop(ctx, sensors) })
+
+	srv := &http.Server{Addr: env("ADDR", ":8080"), Handler: a.Handler()}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		return httpSrv.Shutdown(sctx)
-	})
-	return g.Wait()
+		srv.Shutdown(shutdownCtx)
+	}()
+	log.Printf("listening on %s (sensors %s %v, pump %s, data in %s)",
+		srv.Addr, kind, addrs, env("PUMP", "none"), dataDir)
+	err = srv.ListenAndServe()
+	stop() // if the server failed, stop the loops too
+	wg.Wait()
+	if errors.Is(err, http.ErrServerClosed) {
+		log.Print("stopped")
+		return nil
+	}
+	return err
+}
+
+func env(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
 }

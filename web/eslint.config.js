@@ -3,7 +3,7 @@ import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescri
 
 export default defineConfigWithVueTs(
   { name: 'app/files-to-lint', files: ['**/*.{ts,mts,vue}'] },
-  { name: 'app/ignores', ignores: ['dist/**', 'coverage/**', 'playwright-report/**', 'test-results/**', 'node_modules/**'] },
+  { name: 'app/ignores', ignores: ['dist/**', 'coverage/**', 'node_modules/**'] },
   pluginVue.configs['flat/recommended'],
   vueTsConfigs.recommended,
   {

@@ -1,7 +1,7 @@
 //go:build embedweb
 
-// Package web exposes the built frontend (web/dist) to the Go binary.
-// Build with -tags embedweb after `npm --prefix web run build`.
+// Package web holds the built web app (web/dist). `make build` builds it
+// and compiles it in with -tags embedweb.
 package web
 
 import (
@@ -12,14 +12,8 @@ import (
 //go:embed all:dist
 var dist embed.FS
 
-// Embedded reports whether the real frontend is compiled in.
-const Embedded = true
-
-// Dist returns the built frontend, rooted at dist/.
+// Dist returns the built web app.
 func Dist() fs.FS {
-	sub, err := fs.Sub(dist, "dist")
-	if err != nil {
-		panic(err) // the embed pattern guarantees dist exists
-	}
+	sub, _ := fs.Sub(dist, "dist") // can't fail: the embed guarantees dist
 	return sub
 }

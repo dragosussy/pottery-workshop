@@ -1,6 +1,5 @@
-# Builds the web app and the Go binary (with the web app embedded). Build
-# stages run on the build machine's native platform and cross-compile for
-# the target: deploy.sh builds with --platform linux/arm64 (Raspberry Pi 5).
+# Builds the web app and the Go binary with the web app embedded. The build
+# stages run natively and cross-compile: deploy.sh builds for linux/arm64.
 
 FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS web
 WORKDIR /web
@@ -19,19 +18,10 @@ COPY web/*.go web/
 COPY --from=web /web/dist web/dist
 ARG TARGETOS=linux
 ARG TARGETARCH=arm64
-ARG VERSION=dev
-ARG COMMIT=unknown
-ARG BUILT_AT=
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -tags embedweb -trimpath \
-    -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.builtAt=${BUILT_AT}" \
-    -o humidity ./cmd/humidity
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -tags embedweb -trimpath -o humidity ./cmd/humidity
 
 FROM debian:bookworm-slim
-WORKDIR /app
-COPY --from=builder /app/humidity .
-
-ENV PORT=8080
+COPY --from=builder /app/humidity /usr/local/bin/humidity
 EXPOSE 8080
 VOLUME /data
-
-CMD ["./humidity"]
+CMD ["humidity"]

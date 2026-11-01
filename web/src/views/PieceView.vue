@@ -1,305 +1,300 @@
 <script setup lang="ts">
-// Piece detail (plan §4.5): photo, specs, lifecycle line (tap a time to
-// correct it), prediction card, dryness history (edit/delete with Undo),
-// actions. Pieces that left the shelf stay correctable and can go back.
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
-import type { Observation, Piece } from '@/api/types'
-import { api } from '@/api/endpoints'
-import { errorMessage, isApiError } from '@/api/client'
-import PiecePhoto from '@/components/PiecePhoto.vue'
-import DrynessChip from '@/components/DrynessChip.vue'
-import EtaWindow from '@/components/EtaWindow.vue'
-import Age from '@/components/Age.vue'
-import PieceChart from '@/components/PieceChart.vue'
-import { useSheet } from '@/composables/useSheet'
-import { useNow } from '@/composables/useServerClock'
-import { showToast } from '@/composables/useToast'
-import { stateBeforeEnd, transitionErrorMessage, usePieceActions } from '@/composables/usePieceActions'
-import { useLiveStore } from '@/stores/live'
-import { useReferenceStore } from '@/stores/reference'
-import { useSettingsStore } from '@/stores/settings'
-import { useShelfStore } from '@/stores/shelf'
-import { confidenceWord, dayTime, pieceSpecs } from '@/utils/format'
+import { computed, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { api, type Piece, type PiecePatch } from '@/api'
+import Choice from '@/components/Choice.vue'
+import PreciseSlider from '@/components/PreciseSlider.vue'
+import { TRIM_BAND, drynessWords } from '@/dryness'
+import { FORMS, SIZES, STATES, THICKNESSES, endedText, estimateText, pieceTitle, specs, when } from '@/format'
+import { bumpPhotos, live, markPiece, photoUrl, refreshShelf, say, sayError } from '@/live'
 
 const route = useRoute()
 const router = useRouter()
-const sheet = useSheet()
-const now = useNow()
-const live = useLiveStore()
-const reference = useReferenceStore()
-const settings = useSettingsStore()
-const shelf = useShelfStore()
-const actions = usePieceActions()
-
 const id = computed(() => Number(route.params.id))
 const piece = ref<Piece | null>(null)
-const observations = ref<Observation[]>([])
-const error = ref('')
-const notFound = ref(false)
+const busy = ref(false)
+const editing = ref(false)
 
-async function load() {
-  error.value = ''
-  try {
-    const [p, obs] = await Promise.all([api.piece(id.value), api.pieceObservations(id.value)])
-    piece.value = p
-    observations.value = obs.items
-    notFound.value = false
-  } catch (e) {
-    if (isApiError(e) && e.status === 404) notFound.value = true
-    else {
-      // Offline: fall back to the cached shelf.
-      piece.value = shelf.byId.get(id.value) ?? piece.value
-      error.value = errorMessage(e)
+// The slider starts at the last check; `touched` says whether the potter moved it.
+const dryness = ref(0)
+const touched = ref(false)
+function show(p: Piece, keepSlider = false) {
+  piece.value = p
+  if (keepSlider) return
+  dryness.value = p.last_check.dryness
+  touched.value = false
+}
+
+watch(
+  id,
+  async (pid) => {
+    piece.value = null
+    editing.value = false
+    // "Next piece →" walks the shelf in the order it had when the walk started.
+    if (!live.walk?.includes(pid)) live.walk = live.shelf.some((p) => p.id === pid) ? live.shelf.map((p) => p.id) : null
+    try {
+      show(await api.piece(pid))
+    } catch (e) {
+      sayError(e)
     }
-  }
-}
-watch(id, load, { immediate: true })
-// Refetch after any change (sheets closing, other devices).
-const off = live.onChange((_s, ids) => {
-  if (!ids.length || ids.includes(id.value)) void load()
-})
-onBeforeUnmount(off)
-watch(() => route.query.sheet, (s, prev) => {
-  if (prev && !s) void load()
-})
+  },
+  { immediate: true },
+)
 
-const onShelf = computed(() => piece.value?.state === 'in' || piece.value?.state === 'flipped')
-const pred = computed(() => piece.value?.prediction ?? null)
-const reasons = computed(() => (pred.value?.uncertainty_reasons ?? []).map((r) => reference.label('uncertainty_reasons', r)))
-const tz = computed(() => settings.tz)
-const lifecycle = computed(() => {
-  const p = piece.value
-  if (!p) return []
-  const steps: { label: string; at: string | null; field: string }[] = [{ label: 'Added', at: p.added_at, field: 'added_at' }]
-  if (p.flipped_at) steps.push({ label: 'Flipped', at: p.flipped_at, field: 'flipped_at' })
-  if (p.ended_at) steps.push({ label: p.state === 'trimmed' ? 'Trimmed' : 'Discarded', at: p.ended_at, field: 'ended_at' })
-  return steps
-})
-const SOURCE: Record<Observation['source'], string> = { add: 'when added', user: 'check', flip: 'at flip', end: 'at the end' }
+// An Undo from the message bar changed this piece: reload it.
+watch(
+  () => live.undone,
+  async () => {
+    try {
+      show(await api.piece(id.value))
+    } catch (e) {
+      sayError(e)
+    }
+  },
+)
 
-async function deleteObs(o: Observation) {
+const next = computed(() => {
+  const order = live.walk ?? live.shelf.map((p) => p.id)
+  const i = order.indexOf(id.value)
+  return i >= 0 ? (order[i + 1] ?? null) : null
+})
+const ended = computed(() => piece.value?.state === 'trimmed' || piece.value?.state === 'discarded')
+const checks = computed(() => [...(piece.value?.checks ?? [])].reverse())
+
+async function write(fn: () => Promise<Piece>, done?: string, keepSlider = false) {
+  busy.value = true
   try {
-    await api.deleteObservation(o.id)
-    observations.value = observations.value.filter((x) => x.id !== o.id)
-    void shelf.refresh()
-    showToast({
-      message: 'Reading deleted',
-      action: {
-        label: 'Undo',
-        run: async () => {
-          try {
-            await api.undeleteObservation(o.id)
-            void load()
-            void shelf.refresh()
-          } catch (e) {
-            showToast({ message: `Couldn't undo: ${errorMessage(e)}`, tone: 'error' })
-          }
-        },
-      },
-    })
+    show(await fn(), keepSlider)
+    if (done) say(done)
+    void refreshShelf()
   } catch (e) {
-    showToast({ message: isApiError(e) && e.code === 'last_observation' ? "Can't delete the only reading." : errorMessage(e), tone: 'error' })
-  }
-}
-
-const backBusy = ref(false)
-async function backOnShelf() {
-  const p = piece.value
-  if (!p) return
-  backBusy.value = true
-  try {
-    const [updated] = await actions.transition([p], { state: stateBeforeEnd(p) })
-    if (updated) piece.value = updated
-    void load()
-  } catch (e) {
-    showToast({ message: transitionErrorMessage(e), tone: 'error' })
+    sayError(e)
   } finally {
-    backBusy.value = false
+    busy.value = false
   }
 }
 
-function back() {
-  if (window.history.state?.back) router.back()
-  else void router.push(onShelf.value ? '/shelf' : '/history')
+// After a check the slider stays where it is (still "moved"), so a Trimmed
+// straight after records that same value.
+const saveCheck = () => write(() => api.addCheck(id.value, dryness.value), `Saved ${dryness.value.toFixed(1)}`, true)
+const setState = (state: PiecePatch['state']) => write(() => api.patchPiece(id.value, { state }))
+// Ending sends the slider only if it was moved: otherwise trim records 3.0
+// (so the model never learns from its own estimate) and discard records
+// nothing. The buttons show what they'll record.
+function end(state: 'trimmed' | 'discarded') {
+  const patch = touched.value ? { state, dryness: dryness.value } : { state }
+  return write(() => markPiece(piece.value!, patch))
+}
+const mark = (state: 'flipped') => write(() => markPiece(piece.value!, { state }), undefined, true)
+
+// Two taps to delete: the first arms the button for a few seconds.
+const armed = ref('')
+let armTimer: ReturnType<typeof setTimeout> | undefined
+function confirm(key: string, action: () => unknown) {
+  clearTimeout(armTimer)
+  if (armed.value === key) {
+    armed.value = ''
+    return action()
+  }
+  armed.value = key
+  armTimer = setTimeout(() => (armed.value = ''), 3000)
+}
+
+async function deletePiece() {
+  busy.value = true
+  try {
+    await api.deletePiece(id.value)
+    bumpPhotos() // the id may be reused by a new piece
+    say(`Deleted #${piece.value?.number}`)
+    void refreshShelf()
+    void router.push('/')
+  } catch (e) {
+    sayError(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+const draft = reactive({ label: '', notes: '', form: 'bowl', size: 'medium', thickness: 'medium' } as Pick<Piece, 'label' | 'notes' | 'form' | 'size' | 'thickness'>)
+function startEdit() {
+  const p = piece.value!
+  Object.assign(draft, { label: p.label, notes: p.notes, form: p.form, size: p.size, thickness: p.thickness })
+  editing.value = true
+}
+async function saveEdit() {
+  await write(() => api.patchPiece(id.value, { ...draft, label: draft.label.trim() }))
+  editing.value = false
+}
+
+async function changePhoto(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  busy.value = true
+  try {
+    await api.putPhoto(id.value, file)
+    bumpPhotos()
+    show(await api.piece(id.value))
+  } catch (err) {
+    sayError(err)
+  } finally {
+    busy.value = false
+  }
 }
 </script>
 
 <template>
   <main class="page">
-    <header class="page-header">
-      <button type="button" class="btn btn-ghost" aria-label="Back" @click="back"><span aria-hidden="true">←</span></button>
-      <h1 class="page-title">{{ piece ? `#${piece.number}` : 'Piece' }}<span v-if="piece?.label" class="muted"> · {{ piece.label }}</span></h1>
-      <button v-if="piece" type="button" class="btn btn-ghost" @click="sheet.open('edit', { ids: [piece.id] })">Edit</button>
-      <span v-else style="width: 48px"></span>
+    <header class="bar sticky">
+      <RouterLink to="/" class="btn btn-ghost">← Shelf</RouterLink>
+      <RouterLink v-if="next" :to="`/pieces/${next}`" class="btn">Next piece →</RouterLink>
     </header>
 
-    <p v-if="notFound" class="muted">This piece doesn't exist (or was entered by mistake). <RouterLink to="/shelf">Back to the shelf</RouterLink></p>
-    <p v-if="error && !piece" class="error">{{ error }}</p>
+    <p v-if="!piece" class="muted">Loading…</p>
+    <template v-else>
+      <section class="card">
+        <img v-if="piece.photo" :src="photoUrl(piece.id)" alt="" class="photo" />
+        <h1>{{ pieceTitle(piece) }}</h1>
+        <p class="muted">{{ specs(piece) }} · {{ ended ? endedText(piece) : STATES[piece.state] }} · added {{ when(piece.added_at) }}</p>
+        <p>
+          <strong>{{ ended ? 'Last check' : 'Now about' }}:</strong> {{ drynessWords(piece.dryness) }}
+          <span class="muted num">{{ piece.dryness.toFixed(1) }}</span>
+        </p>
+        <p v-if="piece.estimate">
+          <strong>{{ estimateText(piece.estimate) }}</strong>
+          <span v-if="live.now?.learning" class="muted small"> (rough guess)</span>
+        </p>
+        <p v-if="piece.notes" class="notes">{{ piece.notes }}</p>
+      </section>
 
-    <template v-if="piece">
-      <PiecePhoto :photo-id="piece.photo_id" :form="piece.form" size="full" :alt="`Photo of #${piece.number}`" />
-      <section class="card stack">
-        <div class="specs">{{ pieceSpecs(piece, reference.data) }}</div>
-        <div class="row-wrap">
-          <DrynessChip :value="piece.current_dryness" />
-          <span class="muted">· <Age :since="piece.added_at" :until="piece.ended_at" /> {{ onShelf ? 'on the shelf' : 'on the shelf in total' }}</span>
+      <section v-if="!ended" class="card events">
+        <h2>How dry is it now?</h2>
+        <PreciseSlider
+          v-model="dryness" v-model:touched="touched" :min="0" :max="5" :step="0.1" :band="TRIM_BAND"
+          :last="piece.last_check.dryness" :words="drynessWords" :label="`Dryness of #${piece.number}`"
+        />
+        <p class="muted small">Ring: last check, {{ piece.last_check.dryness.toFixed(1) }} on {{ when(piece.last_check.at) }}</p>
+        <button type="button" class="btn btn-primary btn-block" :disabled="busy" @click="saveCheck">Save check</button>
+        <div class="event-buttons">
+          <button v-if="piece.state === 'in'" type="button" class="btn btn-lg event" :disabled="busy" @click="mark('flipped')">
+            <span class="icon" aria-hidden="true">↻</span> Flipped
+          </button>
+          <button v-else type="button" class="btn btn-lg event" :disabled="busy" @click="setState('in')">
+            <span class="icon" aria-hidden="true">↺</span> Undo flip
+          </button>
+          <button type="button" class="btn btn-lg event" :disabled="busy" @click="end('trimmed')">
+            <span class="icon" aria-hidden="true">✂</span> Trimmed
+            <small class="num">at {{ (touched ? dryness : 3).toFixed(1) }}</small>
+          </button>
+          <button type="button" class="btn btn-lg event" :disabled="busy" @click="end('discarded')">
+            <span class="icon" aria-hidden="true">✕</span> Discarded
+            <small v-if="touched" class="num">at {{ dryness.toFixed(1) }}</small>
+          </button>
         </div>
-        <ol class="lifecycle" aria-label="Lifecycle">
-          <li v-for="(s, i) in lifecycle" :key="s.field">
-            <span class="lc-label"><span v-if="i > 0" aria-hidden="true">→ </span>{{ s.label }}</span>
-            <button type="button" class="lc-time" :aria-label="`${s.label} ${dayTime(s.at, now, tz)}: correct the time`" @click="sheet.open('edit', { ids: [piece.id], focus: s.field })">
-              {{ dayTime(s.at, now, tz) }} <span aria-hidden="true">✎</span>
-            </button>
-          </li>
-        </ol>
-        <p v-if="piece.end_note" class="muted">“{{ piece.end_note }}”</p>
-        <p v-if="piece.notes" class="muted">{{ piece.notes }}</p>
+        <p v-if="piece.flipped_at" class="muted small">Flipped {{ when(piece.flipped_at) }}</p>
+      </section>
+      <section v-else class="card events">
+        <p><strong>{{ endedText(piece) }}</strong></p>
+        <button type="button" class="btn btn-lg btn-block" :disabled="busy" @click="setState('in')">Put back on the shelf</button>
       </section>
 
-      <section v-if="onShelf && pred" class="card stack" :class="{ 'offline-dim': live.offline }" aria-labelledby="pred-h">
-        <h2 id="pred-h" class="h2">Prediction</h2>
-        <p class="pred-main"><EtaWindow :prediction="pred" /></p>
-        <dl class="kv">
-          <template v-if="pred.ready_until">
-            <dt>Best before</dt>
-            <dd>{{ dayTime(pred.ready_until, now, tz) }}</dd>
-          </template>
-          <dt>Confidence</dt>
-          <dd>{{ confidenceWord(pred.confidence) }}</dd>
-          <template v-if="reasons.length">
-            <dt>Wider because</dt>
-            <dd>{{ reasons[0] }}<span v-if="reasons.length > 1" class="faint"> (also {{ reasons.slice(1).join(', ') }})</span></dd>
-          </template>
-          <dt>Based on</dt>
-          <dd>{{ pred.basis.summary }}</dd>
-        </dl>
-      </section>
-
-      <section class="card stack" aria-labelledby="hist-h">
-        <h2 id="hist-h" class="h2">Dryness history</h2>
-        <PieceChart v-if="observations.length > 1" :observations="observations" :added-at="piece.added_at" :ended-at="piece.ended_at" />
-        <ul class="obs">
-          <li v-for="o in [...observations].reverse()" :key="o.id" class="obs-row" data-testid="obs-row">
-            <div class="obs-main">
-              <DrynessChip :value="o.dryness" />
-              <span class="faint small">{{ dayTime(o.observed_at, now, tz) }} · {{ SOURCE[o.source] }}<span v-if="o.flag === 'inconsistent'"> · ⚠ wetter than before</span></span>
-            </div>
-            <div v-if="o.source === 'user'" class="obs-actions">
-              <button type="button" class="btn btn-ghost" :aria-label="`Correct the reading from ${dayTime(o.observed_at, now, tz)}`" @click="sheet.open('observe', { ids: [piece.id], obs: o.id })">✎</button>
-              <button type="button" class="btn btn-ghost" :aria-label="`Delete the reading from ${dayTime(o.observed_at, now, tz)}`" @click="deleteObs(o)">🗑</button>
-            </div>
+      <section class="card">
+        <h2>Checks</h2>
+        <ul class="checks">
+          <li v-for="c in checks" :key="c.id">
+            <span class="num">{{ c.dryness.toFixed(1) }}</span>
+            <span class="grow">{{ drynessWords(c.dryness) }}<br /><span class="muted small">{{ when(c.at) }}</span></span>
+            <button
+              type="button" class="btn btn-small" :class="{ 'btn-danger': armed === 'c' + c.id }"
+              :disabled="busy || checks.length < 2" :aria-label="`Delete check ${c.dryness.toFixed(1)}`"
+              @click="confirm('c' + c.id, () => write(() => api.deleteCheck(c.id)))"
+            >{{ armed === 'c' + c.id ? 'Delete?' : '✕' }}</button>
           </li>
         </ul>
       </section>
 
-      <div v-if="onShelf" class="actions">
-        <button type="button" class="btn btn-primary btn-lg btn-block" @click="sheet.open('observe', { ids: [piece.id] })">Record dryness</button>
-        <div class="row3">
-          <button v-if="piece.state === 'in'" type="button" class="btn" @click="sheet.open('flip', { ids: [piece.id] })">Flip</button>
-          <button type="button" class="btn" @click="sheet.open('trim', { ids: [piece.id] })">Trim</button>
-          <button type="button" class="btn" @click="sheet.open('discard', { ids: [piece.id] })">Discard</button>
+      <section class="card">
+        <template v-if="editing">
+          <label class="field">Label <input v-model="draft.label" class="input" maxlength="100" /></label>
+          <label class="field">Notes <textarea v-model="draft.notes" class="input" maxlength="2000"></textarea></label>
+          <Choice v-model="draft.form" label="Form" :options="FORMS" />
+          <Choice v-model="draft.size" label="Size" :options="SIZES" />
+          <Choice v-model="draft.thickness" label="Walls" :options="THICKNESSES" />
+          <div class="row">
+            <button type="button" class="btn btn-primary" :disabled="busy" @click="saveEdit">Save</button>
+            <button type="button" class="btn btn-ghost" @click="editing = false">Cancel</button>
+          </div>
+        </template>
+        <div v-else class="row">
+          <button type="button" class="btn" @click="startEdit">Edit details</button>
+          <label class="btn">
+            {{ piece.photo ? 'Change photo' : 'Add photo' }}
+            <input type="file" accept="image/*" hidden @change="changePhoto" />
+          </label>
+          <button type="button" class="btn btn-danger" :disabled="busy" @click="confirm('piece', deletePiece)">
+            {{ armed === 'piece' ? 'Really delete?' : 'Delete piece' }}
+          </button>
         </div>
-      </div>
-      <div v-else class="actions">
-        <button type="button" class="btn btn-block" :disabled="backBusy" @click="backOnShelf">↩ Back on the shelf</button>
-      </div>
+      </section>
     </template>
   </main>
 </template>
 
 <style scoped>
-.h2 {
-  font-size: var(--fs-lg);
-  font-weight: 700;
+.sticky {
+  position: sticky;
+  top: env(safe-area-inset-top);
+  z-index: 2;
+  background: var(--bg);
+  margin: calc(-1 * var(--sp-2)) 0;
+  padding: var(--sp-2) 0;
 }
-.specs {
-  font-size: var(--fs-lg);
-  font-weight: 600;
-}
-.lifecycle {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1) var(--sp-3);
-}
-.lifecycle li {
-  display: flex;
-  flex-direction: column;
-}
-.lc-label {
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-  font-weight: 700;
-  text-transform: uppercase;
-}
-.lc-time {
-  min-height: var(--touch);
-  padding: 0;
-  border: 0;
-  background: none;
-  font-weight: 600;
-  text-align: left;
-  text-decoration: underline dotted;
-  cursor: pointer;
-}
-.pred-main {
-  font-size: var(--fs-xl);
-  font-weight: 800;
-}
-.kv {
+.event-buttons {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--sp-1) var(--sp-3);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+.event {
+  flex-direction: column;
+  gap: 2px;
+  padding-inline: var(--sp-1);
+}
+.event .icon {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+.event small {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  opacity: 0.75;
+}
+.events p {
   margin: 0;
 }
-.kv dt {
-  color: var(--text-muted);
+.photo {
+  border-radius: var(--radius-sm);
+  max-height: 50vh;
+  object-fit: cover;
 }
-.kv dd {
-  margin: 0;
+.notes {
+  white-space: pre-wrap;
 }
-.obs {
+.checks {
   list-style: none;
   margin: 0;
   padding: 0;
 }
-.obs-row {
+.checks li {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
+  gap: var(--sp-3);
   padding: var(--sp-2) 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--surface-3);
 }
-.obs-row:last-child {
-  border-bottom: 0;
+.checks .num {
+  font-weight: 700;
+  width: 2.5em;
 }
-.obs-main {
-  display: flex;
-  flex-direction: column;
-}
-.small {
-  font-size: var(--fs-sm);
-}
-.obs-actions {
-  display: flex;
-}
-.actions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-.row3 {
-  display: flex;
-  gap: var(--sp-2);
-}
-.row3 .btn {
+.grow {
   flex: 1;
-}
-.error {
-  color: var(--danger);
 }
 </style>

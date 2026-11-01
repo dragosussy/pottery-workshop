@@ -1,62 +1,52 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
-import { RouterView, useRoute } from 'vue-router'
-import { useLiveStore } from '@/stores/live'
-import { useReferenceStore } from '@/stores/reference'
-import { useSettingsStore } from '@/stores/settings'
-import ToastHost from '@/components/ToastHost.vue'
-import OfflineBanner from '@/components/OfflineBanner.vue'
-import Banner from '@/components/Banner.vue'
-import BottomBar from '@/components/BottomBar.vue'
-import SheetHost from '@/components/SheetHost.vue'
+import { onBeforeUnmount } from 'vue'
+import { live, startPolling, undoLast } from './live'
 
-const live = useLiveStore()
-const reference = useReferenceStore()
-const settings = useSettingsStore()
-const route = useRoute()
-
-const bare = computed(() => route.meta.bare === true)
-const showBar = computed(() => !bare.value && route.meta.focus !== true)
-
-onMounted(() => {
-  live.connect()
-  void reference.load()
-  void settings.load()
-  live.onChange((scopes) => {
-    if (scopes.includes('settings')) void settings.load()
-  })
-})
-
-function reload() {
-  window.location.reload()
-}
+const stop = startPolling()
+onBeforeUnmount(stop)
 </script>
 
 <template>
-  <div class="app" :class="{ 'is-offline': live.offline }">
-    <div v-if="!bare && (live.offline || live.newVersionAvailable)" class="app-banners">
-      <OfflineBanner v-if="live.offline" />
-      <Banner v-if="live.newVersionAvailable" tone="info" icon="↻">
-        The controller was updated.
-        <template #actions>
-          <button type="button" class="btn btn-primary" @click="reload">Reload</button>
-        </template>
-      </Banner>
-    </div>
-    <RouterView />
-    <BottomBar v-if="showBar" />
-    <SheetHost />
-    <ToastHost />
+  <RouterView />
+  <div v-if="live.message" class="message" :class="{ error: live.message.error }" role="status" @click="live.message = null">
+    <span>{{ live.message.text }}</span>
+    <button v-if="live.message.undo" type="button" class="undo" @click.stop="undoLast">Undo</button>
   </div>
 </template>
 
 <style scoped>
-.app-banners {
-  max-width: 640px;
+.message {
+  position: fixed;
+  left: var(--sp-4);
+  right: var(--sp-4);
+  bottom: calc(var(--sp-4) + env(safe-area-inset-bottom));
+  max-width: 600px;
   margin: 0 auto;
-  padding: calc(var(--sp-3) + env(safe-area-inset-top)) var(--gutter) 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius);
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: var(--shadow);
+  z-index: 10;
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.undo {
+  flex: none;
+  min-height: 40px;
+  padding: 0 var(--sp-4);
+  border: 2px solid var(--bg);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--bg);
+  font: inherit;
+  font-weight: 700;
+}
+.message.error {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 2px solid var(--danger);
 }
 </style>

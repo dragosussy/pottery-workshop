@@ -3,46 +3,34 @@ services:
     image: qqrtos/humiditycontrol:latest
     container_name: humiditycontrol
     restart: always
-    stop_grace_period: 10s      # time to flush the open minute on shutdown
-    logging:                    # keep logs bounded on the SD card (~30 MB max)
+    stop_grace_period: 10s      # time to switch the pump off and save the open minute
+    logging:                    # keep logs bounded on the SD card
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
     ports:
-      # Plain HTTP over Tailscale at http://atelier (the Pi's Tailscale
-      # machine name; MagicDNS resolves it for tailnet devices). On a shared
-      # Wi-Fi, consider binding to the Tailscale IP instead, e.g.
-      # "100.111.137.39:80:8080".
-      - "80:8080"
+      - "80:8080"               # http://atelier over Tailscale
     devices:
-      - /dev/i2c-1:/dev/i2c-1   # enable I²C on the Pi first (raspi-config)
+      - /dev/i2c-1:/dev/i2c-1   # enable I²C first (raspi-config)
       # The pump relay. On current Pi 5 kernels the header pins are on
-      # gpiochip0 (`gpioinfo` lists it as pinctrl-rp1); older kernels used
-      # gpiochip4: map that one instead.
+      # gpiochip0 (labelled pinctrl-rp1); older kernels used gpiochip4.
       - /dev/gpiochip0:/dev/gpiochip0
     volumes:
       - ./data:/data            # database, photos and backups
     environment:
-      - PORT=8080
-      - SENSOR_DRIVER=sht4x     # sht4x (SHT40/41/45) or sht3x (SHT31)
-      - I2C_BUS=/dev/i2c-1
-      - SENSORS=main:0x44       # name:I²C address, e.g. shelf:0x44,top:0x45
-      - POLL_INTERVAL=5s
-      - DB_PATH=/data/humidity.db
-      - PHOTO_DIR=/data/photos
-      - BACKUP_DIR=/data/backups
-      - BACKUP_KEEP=14
-      - STUDIO_TZ=Europe/Bucharest   # initial studio time zone; changeable in Settings
-      - CLOCK_CHECK=kernel      # "off" if readings never start (clock_synced stays false in /health)
-      - LOG_LEVEL=info
-      # The pump. Leave "none" until the relay is wired, then set gpio, the
-      # BCM GPIO number of the relay input and its polarity, and check it
-      # with Settings → Pump → "Run 5 s" before setting a target.
-      - PUMP_DRIVER=none        # none | gpio
-      # - PUMP_GPIO_LINE=17     # BCM GPIO17 = physical pin 11
-      # - PUMP_ACTIVE_LOW=true  # true if the relay switches on when its input is low (most cheap relay boards)
-      # - PUMP_PULSE=10s        # one pump run
-      # - PUMP_REST=3m          # pause after a run, for the mist to reach the sensor
-      # - PUMP_HYSTERESIS=2     # run when the shelf is this many % below the target
-      # - PUMP_MAX_RH=95        # never run at or above this
+      - SENSOR=sht4x            # sht4x (SHT40/41/45) or sht3x (SHT31)
+      - SENSOR_ADDRS=0x44       # comma-separated, e.g. 0x44,0x45
+      # The pump: leave "none" until the relay is wired. Then set gpio, the
+      # relay's BCM pin and its polarity, and try "Run 1 s" before setting a
+      # target.
+      - PUMP=none
+      # - PUMP=gpio
+      # - PUMP_PIN=17           # BCM GPIO17 = physical pin 11
+      # PUMP_ACTIVE_LOW has no default on purpose: a wrong guess runs the
+      # pump while the app shows it off. Most cheap relay boards switch on
+      # when their input is low (true). Check with "Run 1 s".
+      # - PUMP_ACTIVE_LOW=true
+      # - PUMP_PULSE=10s
+      # - PUMP_REST=3m
+      # - PUMP_MAX_RH=95
