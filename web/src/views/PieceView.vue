@@ -5,7 +5,7 @@ import { api, type Piece, type PiecePatch } from '@/api'
 import Choice from '@/components/Choice.vue'
 import PreciseSlider from '@/components/PreciseSlider.vue'
 import { TRIM_BAND, drynessWords } from '@/dryness'
-import { FORMS, SIZES, STATES, THICKNESSES, endedText, estimateText, pieceTitle, specs, when } from '@/format'
+import { FORMS, SIZES, STATES, THICKNESSES, endedText, estimateParts, pieceTitle, specs, when } from '@/format'
 import { bumpPhotos, live, markPiece, photoUrl, refreshShelf, say, sayError } from '@/live'
 
 const route = useRoute()
@@ -58,6 +58,7 @@ const next = computed(() => {
   const i = order.indexOf(id.value)
   return i >= 0 ? (order[i + 1] ?? null) : null
 })
+const estimate = computed(() => (piece.value?.estimate ? estimateParts(piece.value.estimate, live.clock) : null))
 const ended = computed(() => piece.value?.state === 'trimmed' || piece.value?.state === 'discarded')
 const checks = computed(() => [...(piece.value?.checks ?? [])].reverse())
 
@@ -154,14 +155,16 @@ async function changePhoto(e: Event) {
       <section class="card">
         <img v-if="piece.photo" :src="photoUrl(piece.id)" alt="" class="photo" />
         <h1>{{ pieceTitle(piece) }}</h1>
+        <div v-if="estimate" class="estimate" :class="'est-' + piece.estimate!.status" data-testid="estimate">
+          <span class="est-label">{{ estimate.label }}</span>
+          <span class="est-headline">{{ estimate.headline }}</span>
+          <span v-if="estimate.detail" class="est-detail">{{ estimate.detail }}</span>
+          <span v-if="live.now?.learning" class="est-detail">Rough guess: the app is still learning your shelf.</span>
+        </div>
         <p class="muted">{{ specs(piece) }} · {{ ended ? endedText(piece) : STATES[piece.state] }} · added {{ when(piece.added_at) }}</p>
         <p>
           <strong>{{ ended ? 'Last check' : 'Now about' }}:</strong> {{ drynessWords(piece.dryness) }}
           <span class="muted num">{{ piece.dryness.toFixed(1) }}</span>
-        </p>
-        <p v-if="piece.estimate">
-          <strong>{{ estimateText(piece.estimate) }}</strong>
-          <span v-if="live.now?.learning" class="muted small"> (rough guess)</span>
         </p>
         <p v-if="piece.notes" class="notes">{{ piece.notes }}</p>
       </section>
@@ -247,6 +250,43 @@ async function changePhoto(e: Event) {
   background: var(--bg);
   margin: calc(-1 * var(--sp-2)) 0;
   padding: var(--sp-2) 0;
+}
+.estimate {
+  display: grid;
+  gap: 2px;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius);
+  border-left: 6px solid var(--accent);
+  background: var(--accent-soft);
+}
+.estimate.est-ready {
+  border-color: var(--ok);
+  background: var(--ok-soft);
+}
+.estimate.est-past {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+.est-label {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.est-headline {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+.est-ready .est-headline {
+  color: var(--ok);
+}
+.est-past .est-headline {
+  color: var(--warn);
+}
+.est-detail {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
 }
 .event-buttons {
   display: grid;

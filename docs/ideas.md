@@ -51,11 +51,11 @@ Not features: things to do once, with the hardware.
 
 ## Estimates
 
-- **Estimates that follow the target.** Today, raising the target doesn't
-  move estimates until the next check. Keeping a history of target changes
-  and scaling hours by `(100 − target)` relative to a reference would fix
-  that, at about 25 lines in `predict`. Only worth it if estimates visibly lag
-  after target changes, since the next check corrects them anyway.
+- **Temperature in the drying speed.** The model uses `100 − RH` only. If a
+  cold or hot spell visibly throws estimates off, switch `speed` to the
+  vapour-pressure deficit (temperature and humidity). Readings already store
+  temperature, so it's about 10 lines in `predict` plus a mean temperature
+  per stretch.
 - **A learned factor per wall thickness.** Once a thickness class has 3 or
   more trimmed pieces, give it its own `k` instead of the one studio factor.
   Small change in `predict.go`; useful if thick pieces are consistently off
@@ -102,6 +102,6 @@ Not features: things to do once, with the hardware.
 
 These were in the first version and removed. They shouldn't come back
 without a concrete problem they solve: live push updates, the visit planner,
-follow-up questions, the climate-model (VPD) drying dose, confidence levels,
+follow-up questions, the in-memory drying-dose index with gap filling, confidence levels,
 soft deletes, the mock backend, and the colour picker. See the
 "Deliberately dropped" list in [design.md](design.md).

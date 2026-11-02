@@ -2,7 +2,7 @@
 import type { Piece } from '@/api'
 import { drynessWords } from '@/dryness'
 import { endedText, estimateText, pieceTitle } from '@/format'
-import { photoUrl } from '@/live'
+import { live, photoUrl } from '@/live'
 
 defineProps<{ piece: Piece }>()
 </script>
@@ -16,7 +16,7 @@ defineProps<{ piece: Piece }>()
         <strong>{{ pieceTitle(piece) }}</strong>
         <span v-if="piece.state === 'flipped'" class="tag small">flipped</span>
         <span class="small">{{ drynessWords(piece.dryness) }} <span class="muted num">{{ piece.dryness.toFixed(1) }}</span></span>
-        <span v-if="piece.estimate" class="small" :class="'est-' + piece.estimate.status">{{ estimateText(piece.estimate) }}</span>
+        <span v-if="piece.estimate" class="small" :class="'est-' + piece.estimate.status">{{ estimateText(piece.estimate, live.clock) }}</span>
         <span v-else class="small muted">{{ endedText(piece) }}</span>
       </span>
     </RouterLink>

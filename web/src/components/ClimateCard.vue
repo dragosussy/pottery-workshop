@@ -5,7 +5,7 @@
 import { computed, ref, watch } from 'vue'
 import { api, type History, type Now } from '@/api'
 import { ago, pumpText } from '@/format'
-import { live, sayError, setNow } from '@/live'
+import { live, refreshShelf, sayError, setNow } from '@/live'
 import LineChart from './LineChart.vue'
 import PreciseSlider from './PreciseSlider.vue'
 
@@ -35,6 +35,11 @@ function startEdit() {
   const guess = n.target ?? Math.round(n.room?.rh ?? 80)
   draft.value = Math.min(n.max_rh - 1, Math.max(50, guess))
   editing.value = true
+}
+// Estimates depend on the target, so the piece list refreshes with it.
+function targetSaved() {
+  editing.value = false
+  void refreshShelf()
 }
 const close = () => (editing.value = false)
 
@@ -96,8 +101,8 @@ watch(
     <template v-if="now && editing">
       <PreciseSlider v-model="draft" :min="50" :max="now.max_rh - 1" :step="1" unit=" %" label="Humidity target" :last="now.target" />
       <div class="row">
-        <button type="button" class="btn btn-primary" :disabled="busy" @click="run(() => api.setTarget(draft), close)">Save</button>
-        <button type="button" class="btn" :disabled="busy" @click="run(() => api.setTarget(null), close)">Clear</button>
+        <button type="button" class="btn btn-primary" :disabled="busy" @click="run(() => api.setTarget(draft), targetSaved)">Save</button>
+        <button type="button" class="btn" :disabled="busy" @click="run(() => api.setTarget(null), targetSaved)">Clear</button>
         <button type="button" class="btn btn-ghost" @click="close">Cancel</button>
       </div>
     </template>

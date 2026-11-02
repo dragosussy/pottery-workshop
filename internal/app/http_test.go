@@ -159,6 +159,23 @@ func TestHTTP(t *testing.T) {
 	id := int64(created[0]["id"].(float64))
 	piecePath := fmt.Sprintf("/api/pieces/%d", id)
 
+	// A higher target means damper air and slower drying: the estimate moves
+	// later as soon as the target changes, with no new check.
+	readyAt := func(pct string) time.Time {
+		call("PUT", "/api/target", `{"pct": `+pct+`}`, 200, nil)
+		var p Piece
+		call("GET", piecePath, nil, 200, &p)
+		if p.Estimate == nil || p.Estimate.ReadyAt == nil {
+			t.Fatalf("estimate at target %s = %+v", pct, p.Estimate)
+		}
+		return *p.Estimate.ReadyAt
+	}
+	at70, at90 := readyAt("70"), readyAt("90")
+	if !at90.After(at70.Add(24 * time.Hour)) {
+		t.Errorf("ready at 70 %% = %v, at 90 %% = %v; want 90 %% much later", at70, at90)
+	}
+	call("PUT", "/api/target", `{"pct": null}`, 200, nil)
+
 	// Photo.
 	// A camera-sized photo is stored shrunk to photoEdge on its long edge.
 	var camera bytes.Buffer

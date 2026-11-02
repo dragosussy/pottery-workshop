@@ -48,8 +48,10 @@ battery so the clock is right straight after boot.
 - Flipped / Trimmed / Discarded as large buttons on the piece page, each
   with Undo.
 - Edit a piece's label, notes, form, size and thickness. Delete a piece.
-- An estimate per piece: "ready around Sat 14:00", "ready now, until Sun
-  09:00", or "probably past leather hard".
+- An estimate per piece: "ready around Tue 10 Nov 13:00 (in 8 days)", "ready
+  now, until today 21:00", or "probably past leather hard". Times say
+  "today", "tomorrow" or "yesterday", and otherwise always carry the date, so
+  next Tuesday is never mistaken for tomorrow.
 - A list of finished pieces (trimmed/discarded).
 
 **Housekeeping**
@@ -79,18 +81,32 @@ backdating ("this happened 2 hours ago"), piece groups, follow-up questions,
 soft deletes and undo toasts, "entered by mistake", observation editing
 (delete and re-add instead), the visit planner ("come Sat 09:00–11:30"), the
 target preview, confidence levels and uncertainty reasons, the climate event
-log, offline and sensor-gap detection, the clock-sync guard, VPD drying-dose
-modelling, the studio time-zone setting (the phone shows local time), photo
+log, offline and sensor-gap detection, the clock-sync guard, the VPD
+(temperature + humidity) drying-dose model with gap filling, the studio time-zone setting (the phone shows local time), photo
 thumbnails, pagination, demo data seeding, the mock frontend
 backend, the colour palette picker, and version/commit build stamping.
 
 ## 3. Prediction
 
-Plain wall-clock hours. The pump holds the humidity roughly constant, so the
-studio's drying speed is one constant, and that constant is learned. Checks
-are always ordered by `(at, id)`.
+Clay dries at a speed set by how dry the air is: `100 − RH`. The model keeps
+every rate at a reference humidity of **80 %**. It converts what a piece did
+using the humidity recorded while it was watched, and projects its future at
+the humidity the shelf is expected to have. So changing the target moves
+every estimate straight away, with no new check. Checks are always ordered by
+`(at, id)`.
 
-**Prior rate** (dryness units per hour) from the piece's build:
+**Drying speed** relative to 80 %:
+
+```
+speed(rh) = max(100 − rh, 1) / 20          // 80 % → 1, 90 % → 0.5, 60 % → 2
+```
+
+For a past stretch, `rh` is the mean of the recorded minutes in it. When
+nothing was recorded (the Pi was off), the expected humidity below stands in.
+The **expected humidity** is the target, else the latest reading, else the
+last day's mean, else 80.
+
+**Prior rate** (dryness units per hour at 80 %) from the piece's build:
 
 ```
 hoursPerUnit = {thin: 6, medium: 12, thick: 24}
@@ -103,39 +119,49 @@ its first check is below 2.8, its last check is at or above 2.8, and they are
 at least 1 h apart:
 
 ```
-r_i = (d_last − d_first) / hours(first → last)
+r_i = (d_last − d_first) / hours(first → last) / speed(first → last)
 k   = exp( Σ ln(r_i / prior_i) / (n + 1) )      // n samples; k = 1 with none
 ```
 
-**Per-piece rate.** Its own slope is blended in by how long it has been
-watched:
+**Per-piece rate** at 80 %. Its own slope is blended in by how long it has
+been watched:
 
 ```
 base  = k × prior
 h     = hours(first check → last check)
-own   = (d_last − d_first) / h
+own   = (d_last − d_first) / h / speed(first → last)
 w     = (h ≥ 1 and own > 0) ? min(h / 12, 6) : 0
 own'  = clamp(own, 0.1·base, 10·base)
 rate  = exp( (w·ln(own') + 2·ln(base)) / (w + 2) )      // = base when w = 0
 ```
 
-**Outputs** for a piece on the shelf (`t_last`, `d_last` = its latest check):
+**Outputs** for a piece on the shelf (`t_last`, `d_last` = its latest check).
+Since the last check it dried at the recorded humidity; from now on it dries
+at the expected one:
 
 ```
-dryness_now = min(d_last + rate × hours(t_last → now), 5)
+dryness_now = min(d_last + rate × speed(t_last → now) × hours(t_last → now), 5)
+future      = rate × speed(expected humidity)
 status      = dryness_now < 2.8 → "drying"
               dryness_now ≤ 3.6 → "ready"
               otherwise         → "past"
-ready_at    = drying: t_last + (3.0 − d_last) / rate;      else null
-ready_until = drying or ready: t_last + (3.6 − d_last) / rate; else null
+ready_at    = drying: now + (3.0 − dryness_now) / future;          else null
+ready_until = drying or ready: now + (3.6 − dryness_now) / future; else null
 learning    = n < 5     // the UI says "rough guess" while true
 ```
 
 `ready_at` is when the piece reaches the trim target (3.0), even though its
-status turns `ready` at 2.8. Ended pieces get no estimate. It is a pure
-function `predict.Run(pieces, now) → (estimates, n)`, computed on every
-request (tens of pieces). Raising the humidity target doesn't change
-estimates directly; the next check does.
+status turns `ready` at 2.8. Ended pieces get no estimate.
+
+`predict.Run(pieces, now, climate) → (estimates, n)` is a pure function. The
+app passes a `Climate`: a function giving the mean recorded humidity for a
+stretch (one SQL `avg` over `readings`) and the expected humidity. It is
+computed on every request (tens of pieces). After the target is saved, the
+web app refreshes the piece list so the new estimates show at once.
+
+The model only uses humidity, not temperature: with the shelf held at a
+target, temperature swings are small and average out, and whatever stays
+constant is absorbed into `k`.
 
 ## 4. Pump control
 
@@ -472,8 +498,11 @@ styles/         tokens.css (the "tide" palette, light/dark), base.css
     page, where its events are (the list has no event buttons, on purpose).
   - "Add pieces" button. A "Finished" link.
 - **Piece `/pieces/:id`**
-  - Photo, number, specs, estimate, notes. Edit label/notes/form/size/thickness,
-    and add or change the photo.
+  - Photo, number, then the estimate as a coloured block in large type:
+    "Ready to trim around / Thu 5 Nov 20:11 / in 3 days · trimmable until …"
+    (teal), "Ready to trim / Now / until today 21:12" (green) or "Past
+    leather hard" (amber), plus "rough guess" while learning. Then specs and
+    notes. Edit label/notes/form/size/thickness, and add or change the photo.
   - Right under the header, one card: the **dryness slider**, **Save check**,
     and large Flipped (or Undo flip) / Trimmed / Discarded buttons; once
     ended, Put back instead. Trimmed and Discarded send the slider's value

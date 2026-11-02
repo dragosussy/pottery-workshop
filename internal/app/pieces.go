@@ -127,7 +127,8 @@ func (a *App) loadPieces(ctx context.Context) (pieces []*Piece, n int, err error
 		_, err := os.Stat(a.photoPath(p.ID))
 		p.Photo = err == nil
 	}
-	estimates, n := predict.Run(in, time.Now())
+	now := time.Now()
+	estimates, n := predict.Run(in, now, a.climate(ctx, now))
 	for _, p := range pieces {
 		if e, ok := estimates[p.ID]; ok {
 			p.Dryness = roundDryness(e.Dryness)
@@ -405,3 +406,24 @@ func errorf(code int, format string, args ...any) error {
 }
 
 var errNoPiece = errorf(404, "no such piece")
+
+// climate is what the model needs about the shelf's humidity: the recorded
+// mean for any stretch, and what to expect from now on (the target, else the
+// latest reading, else the last day's mean).
+func (a *App) climate(ctx context.Context, now time.Time) predict.Climate {
+	meanRH := func(from, to time.Time) (float64, bool) {
+		var rh sql.NullFloat64
+		err := a.DB.QueryRowContext(ctx, `SELECT avg(rh) FROM readings WHERE minute >= ? AND minute < ?`,
+			from.Unix(), to.Unix()).Scan(&rh)
+		return rh.Float64, err == nil && rh.Valid
+	}
+	ahead := float64(predict.RefRH)
+	if t := a.Live.Target(); t > 0 {
+		ahead = float64(t)
+	} else if room, ok := a.Live.Room(now); ok {
+		ahead = room.RH
+	} else if rh, ok := meanRH(now.Add(-24*time.Hour), now); ok {
+		ahead = rh
+	}
+	return predict.Climate{MeanRH: meanRH, Ahead: ahead}
+}

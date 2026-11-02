@@ -25,6 +25,10 @@ func trimmed(p Piece) Piece {
 	return p
 }
 
+// ref is a shelf held at the reference humidity, with no readings: rates
+// are plain dryness per hour.
+var ref = Climate{Ahead: RefRH}
+
 func near(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
 
 func TestPrior(t *testing.T) {
@@ -67,7 +71,7 @@ func TestStudioFactor(t *testing.T) {
 		{"single check", []Piece{trimmed(piece(9, 0, 3.0))}, 1, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			k, n := StudioFactor(tc.pieces)
+			k, n := StudioFactor(tc.pieces, ref)
 			if !near(k, tc.k) || n != tc.n {
 				t.Errorf("StudioFactor() = %v, %d; want %v, %d", k, n, tc.k, tc.n)
 			}
@@ -97,7 +101,7 @@ func TestRate(t *testing.T) {
 		{"middle checks don't matter", piece(1, 0, 1.0, 6, 0.5, 12, 3.0), 1, base * math.Cbrt(2)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := Rate(tc.p, tc.k); !near(got, tc.want) {
+			if got := Rate(tc.p, tc.k, ref); !near(got, tc.want) {
 				t.Errorf("Rate() = %v, want %v", got, tc.want)
 			}
 		})
@@ -125,7 +129,7 @@ func TestRun(t *testing.T) {
 		{"counts from the last check", piece(1, 0, 1.0, 1, 1.0), 13, Estimate{Dryness: 2.0, Status: "drying", ReadyAt: at(25), ReadyUntil: at(32.2)}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			est, n := Run([]Piece{tc.p, ended}, h(tc.now))
+			est, n := Run([]Piece{tc.p, ended}, h(tc.now), ref)
 			if n != 0 {
 				t.Errorf("n = %d, want 0", n)
 			}
@@ -148,7 +152,7 @@ func TestRunUsesLearnedFactor(t *testing.T) {
 		pieces = append(pieces, trimmed(piece(int64(10+i), 0, 1.0, 12, 3.0)))
 	}
 	pieces = append(pieces, piece(1, 0, 1.0))
-	est, n := Run(pieces, t0)
+	est, n := Run(pieces, t0, ref)
 	if n != 5 {
 		t.Fatalf("n = %d, want 5", n)
 	}
@@ -164,4 +168,53 @@ func sameTime(a, b *time.Time) bool {
 		return a == b
 	}
 	return a.Equal(*b)
+}
+
+func TestSpeed(t *testing.T) {
+	for _, tc := range []struct{ rh, want float64 }{
+		{80, 1}, {90, 0.5}, {60, 2}, {100, 0.05}, {120, 0.05},
+	} {
+		if got := Speed(tc.rh); !near(got, tc.want) {
+			t.Errorf("Speed(%v) = %v, want %v", tc.rh, got, tc.want)
+		}
+	}
+}
+
+func TestRunFollowsTheTarget(t *testing.T) {
+	at := func(hours float64) *time.Time { x := h(hours); return &x }
+	p := piece(1, 0, 1.0)
+	// At 80 % the piece needs 24 h to reach 3.0. At 90 % the air is half as
+	// dry, so from now on it dries at half the speed.
+	for _, tc := range []struct {
+		ahead float64
+		want  *time.Time
+	}{
+		{80, at(24)},
+		{90, at(12 + 24)}, // 12 h done at 80 % (dryness 2.0), then 1.0 at 1/24 per hour
+		{60, at(12 + 6)},  // twice as fast
+	} {
+		c := Climate{Ahead: tc.ahead, MeanRH: func(from, to time.Time) (float64, bool) { return 80, true }}
+		est, _ := Run([]Piece{p}, h(12), c)
+		if got := est[1]; !near(got.Dryness, 2.0) || !sameTime(got.ReadyAt, tc.want) {
+			t.Errorf("ahead %v %%: dryness %v, ready %v; want 2.0, %v", tc.ahead, got.Dryness, got.ReadyAt, tc.want)
+		}
+	}
+}
+
+func TestRecordedHumidityIsNormalised(t *testing.T) {
+	// Five samples that dried at the prior's pace while the shelf was at 90 %:
+	// at the reference humidity that's twice the prior.
+	var pieces []Piece
+	for i := range 5 {
+		pieces = append(pieces, trimmed(piece(int64(10+i), 0, 1.0, 24, 3.0)))
+	}
+	at90 := Climate{Ahead: 90, MeanRH: func(from, to time.Time) (float64, bool) { return 90, true }}
+	k, n := StudioFactor(pieces, at90)
+	if want := math.Pow(2, 5.0/6); n != 5 || !near(k, want) {
+		t.Errorf("k = %v (n %d), want %v", k, n, want)
+	}
+	// Without readings the expected humidity stands in.
+	if k2, _ := StudioFactor(pieces, Climate{Ahead: 90}); !near(k2, k) {
+		t.Errorf("k without readings = %v, want %v", k2, k)
+	}
 }
