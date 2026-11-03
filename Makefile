@@ -1,6 +1,6 @@
-# Development and builds. deploy.sh builds the Docker image the same way.
+# Development. The Docker image (deploy.sh) does its own build.
 
-.PHONY: dev test web build build-pi clean
+.PHONY: dev test
 
 # The backend with the simulated sensor, pump and screen (the screen is
 # drawn to ./data/screen.png), and the Vite dev server (it proxies /api to
@@ -11,26 +11,13 @@ dev:
 	npm --prefix web run dev & \
 	wait
 
+# Everything that should pass before a deploy: Go formatting, vet (for this
+# machine and the Pi) and tests, then the web app's types, lint and tests.
 test:
 	gofmt -l cmd internal web/*.go | (! grep .)
 	go vet ./...
 	GOOS=linux GOARCH=arm64 go vet ./...
 	go test ./...
-
-web/node_modules: web/package-lock.json
-	npm --prefix web ci
-	@touch web/node_modules
-
-web: web/node_modules
-	npm --prefix web run build
-
-# A binary for this machine with the web app embedded.
-build: web
-	go build -tags embedweb -trimpath -o bin/humidity ./cmd/humidity
-
-# The same for the Raspberry Pi 5.
-build-pi: web
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags embedweb -trimpath -o bin/humidity-linux-arm64 ./cmd/humidity
-
-clean:
-	rm -rf bin
+	npm --prefix web run type-check
+	npm --prefix web run lint
+	npm --prefix web test

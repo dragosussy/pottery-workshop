@@ -481,8 +481,8 @@ Everything else (poll interval, backups kept, I²C bus) is a constant.
 
 - `make dev`: backend with `SENSOR=sim PUMP=sim DATA_DIR=./data`, plus the
   Vite dev server proxying `/api`.
-- `make test`, `make build` (web, then Go with the embedded app),
-  `make build-pi` (linux/arm64).
+- `make test`: gofmt, `go vet` (host and linux/arm64), Go tests, then the
+  web app's type-check, lint and tests.
 - Docker image and `docker-compose.yml` as today: port 80 → 8080, `/dev/i2c-1`
   and `/dev/gpiochip0` mapped, `./data:/data`, logs capped at 3 × 10 MB.
   `deploy.sh` builds, pushes and restarts.

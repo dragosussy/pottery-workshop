@@ -25,13 +25,11 @@ Needs Go 1.26 and Node 22+.
 ```sh
 make dev     # backend with a simulated sensor and pump (data in ./data),
              # plus the Vite dev server on http://localhost:5173
-make test    # gofmt, go vet (Mac and Pi), Go tests
-npm --prefix web test           # web unit tests
-npm --prefix web run type-check
-npm --prefix web run lint
-make build   # bin/humidity with the web app embedded
-make build-pi
+make test    # Go: gofmt, vet (Mac and Pi), tests; web: types, lint, tests
 ```
+
+Run `npm --prefix web ci` once first (and again when `package-lock.json`
+changes).
 
 The simulated sensor reacts to the simulated pump, so setting a target above
 the shelf's humidity shows the pump at work. Delete `./data` to start over.
@@ -45,10 +43,10 @@ To use the dev server from a phone on the tailnet, open
    that `/dev/i2c-1` exists; the container won't start without it), install
    Docker, join the tailnet with the machine name `atelier`, and fit the RTC
    battery.
-2. Create `.env.dev` here with `PI_USER`, `PI_HOST` and `PI_DIR`, and log in
+2. Create `.env` here with `PI_USER`, `PI_HOST` and `PI_DIR`, and log in
    to Docker Hub (`docker login`). Optional: `ssh-copy-id $PI_USER@$PI_HOST`
    so deploys don't ask for the Pi's password.
-3. `./deploy.sh dev` builds the arm64 image, pushes it, copies
+3. `./deploy.sh` builds the arm64 image, pushes it, copies
    `docker-compose.yml` to the Pi and restarts the app.
 
 The app is then at `http://atelier` from any device on the tailnet.
