@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// The shelf's climate in one card: humidity now next to its target (with a
-// Change control; no target means humidity control is off), temperature, how old the reading is, the pump, and the
+// The shelf's climate in one card: humidity now next to its target (the
+// target chip opens the slider; no target means humidity control is off),
+// a scale bar showing both, temperature, how old the reading is, the pump, and the
 // charts.
 import { computed, ref, watch } from 'vue'
 import { api, type History, type Now } from '@/api'
@@ -48,6 +49,11 @@ function targetSaved() {
 }
 const close = () => (editing.value = false)
 
+// The scale bar under the reading: humidity and target on 40–100 %.
+const SCALE_MIN = 40
+const along = (pct: number) => `${Math.min(100, Math.max(0, ((pct - SCALE_MIN) / (100 - SCALE_MIN)) * 100))}%`
+const shownTarget = computed(() => (editing.value ? draft.value : (now.value?.target ?? null)))
+
 async function run(write: () => Promise<Now>, after?: () => void) {
   busy.value = true
   try {
@@ -88,20 +94,39 @@ watch(
 
 <template>
   <section class="card">
-    <div class="top">
+    <!-- Humidity and where it should be -->
+    <div class="reading">
       <div>
         <div class="label">Humidity</div>
-        <div class="big num">{{ room ? room.rh.toFixed(1) : '–' }}<small> %</small></div>
+        <div v-if="room" class="big num">{{ room.rh.toFixed(1) }}<small> %</small></div>
+        <div v-else class="big none">–</div>
       </div>
-      <div v-if="now" class="target">
-        <div class="label">Target</div>
-        <div v-if="now.target === null" class="big off">Off</div>
-        <div v-else class="big num">{{ now.target }}<small> %</small></div>
-        <button v-if="!editing" type="button" class="btn btn-small" @click="startEdit">{{ now.target === null ? 'Turn on' : 'Change' }}</button>
-      </div>
+      <button
+        v-if="now"
+        type="button"
+        class="target"
+        :class="{ off: shownTarget === null, editing }"
+        :aria-label="now.target === null ? 'Turn humidity control on' : 'Change the target'"
+        :disabled="editing"
+        @click="startEdit"
+      >
+        <span class="label">Target</span>
+        <span v-if="shownTarget === null" class="mid">Off</span>
+        <span v-else class="mid num">{{ shownTarget }}<small> %</small></span>
+        <span class="action" :class="{ hidden: editing }">{{ now.target === null ? 'Turn on' : 'Change' }}</span>
+      </button>
     </div>
-    <p class="small" :class="bad ? 'bad' : 'muted'">
-      <span v-if="room" class="num">{{ room.temp.toFixed(1) }} °C · </span>{{ status }}
+
+    <div v-if="now" class="scale" aria-hidden="true">
+      <div v-if="room" class="fill" :style="{ width: along(room.rh) }" />
+      <div v-if="shownTarget !== null" class="tick" :style="{ left: along(shownTarget) }" />
+    </div>
+
+    <p class="small status">
+      <span v-if="room" class="num temp">{{ room.temp.toFixed(1) }} °C</span>
+      <span v-if="room" class="muted"> · </span>
+      <span :class="bad ? 'bad' : 'muted'">{{ status }}</span>
+      <span v-if="now && now.target === null && !editing" class="muted"> · not controlling humidity</span>
     </p>
 
     <template v-if="now && editing">
@@ -113,19 +138,23 @@ watch(
       </div>
     </template>
 
-    <div v-if="now?.pump.enabled" class="pump">
-      <p :class="{ bad: now.pump.status === 'stopped' }">
-        <strong>Pump:</strong> {{ pumpText(now.pump) }}
-        <span v-if="now.pump.last_run_at" class="muted small"> · last ran {{ ago(live.clock - Date.parse(now.pump.last_run_at)) }}</span>
-      </p>
-      <div class="row">
-        <button type="button" class="btn btn-small" :disabled="busy" @click="run(() => api.pumpRun(TEST_SECONDS))">Run {{ TEST_SECONDS }} s</button>
-        <button v-if="now.pump.status === 'stopped'" type="button" class="btn btn-small btn-primary" :disabled="busy" @click="run(api.pumpResume)">Resume</button>
-        <button v-else type="button" class="btn btn-small btn-danger" :disabled="busy" @click="run(api.pumpStop)">Stop</button>
-      </div>
+    <!-- The pump that holds the target -->
+    <div v-if="now" class="pump">
+      <template v-if="now.pump.enabled">
+        <p :class="{ bad: now.pump.status === 'stopped' }">
+          <span class="label">Pump</span> {{ pumpText(now.pump) }}
+          <span v-if="now.pump.last_run_at" class="muted small"> · last ran {{ ago(live.clock - Date.parse(now.pump.last_run_at)) }}</span>
+        </p>
+        <div class="row">
+          <button type="button" class="btn btn-small" :disabled="busy" @click="run(() => api.pumpRun(TEST_SECONDS))">Run {{ TEST_SECONDS }} s</button>
+          <button v-if="now.pump.status === 'stopped'" type="button" class="btn btn-small btn-primary" :disabled="busy" @click="run(api.pumpResume)">Resume</button>
+          <button v-else-if="now.target !== null || now.pump.on" type="button" class="btn btn-small btn-danger" :disabled="busy" @click="run(api.pumpStop)">Stop</button>
+        </div>
+      </template>
+      <p v-else class="muted small"><span class="label">Pump</span> not connected</p>
     </div>
-    <p v-else-if="now" class="muted small">No pump connected.</p>
 
+    <!-- The past -->
     <div class="history-head">
       <span class="label">History</span>
       <div class="chips small-chips" role="group" aria-label="Chart period">
@@ -142,12 +171,6 @@ watch(
 </template>
 
 <style scoped>
-.top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--sp-4);
-}
 .label {
   font-size: var(--fs-sm);
   font-weight: 600;
@@ -158,30 +181,116 @@ watch(
   font-weight: 800;
   line-height: 1;
 }
-.big small {
-  font-size: var(--fs-xl);
+.mid {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
 }
+.big small,
+.mid small {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+}
+.none {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+.reading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--sp-4);
+}
+
+/* The target: a tappable figure answering the big number. */
 .target {
-  text-align: right;
   display: grid;
   justify-items: end;
-  gap: var(--sp-1);
-}
-.target .big {
+  gap: 2px;
+  padding: var(--sp-1) var(--sp-2);
+  margin: calc(-1 * var(--sp-1)) calc(-1 * var(--sp-2)) 0 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
   color: var(--accent);
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
 }
-.target .big.off {
+.target:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.target.editing {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  cursor: default;
+}
+.target.off {
   color: var(--text-muted);
 }
+.target .action {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.target .action.hidden {
+  visibility: hidden;
+}
+
+/* Humidity (fill) and target (tick) on one 40–100 % scale. */
+.scale {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  margin-top: var(--sp-1);
+}
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 5px;
+  background: var(--dry-2);
+  transition: width 0.4s;
+}
+.tick {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  width: 4px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface);
+  transition: left 0.15s;
+}
+
+.status {
+  margin: 0;
+}
+.temp {
+  color: var(--temp);
+  font-weight: 700;
+}
+
 .pump {
-  display: grid;
-  gap: var(--sp-2);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
   padding-top: var(--sp-3);
   border-top: 1px solid var(--surface-3);
 }
 .pump p {
   margin: 0;
 }
+.pump .label {
+  margin-right: var(--sp-1);
+}
+
 .history-head {
   display: flex;
   justify-content: space-between;

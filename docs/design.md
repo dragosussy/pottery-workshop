@@ -507,13 +507,15 @@ styles/         tokens.css (the "tide" palette, light/dark), base.css
 - **Polling.** `GET /api/now` every 5 s while the page is visible; the piece
   list refreshes every 30 s and after every write.
 - **Home `/`**
-  - One climate card: humidity now and the target side by side, in large
-    type (with a
-    "Change" control: slider, Save, Turn off; with no target it shows "Off"
-    and "Turn on"), temperature, the pump's status
-    line with its reason and Run 1 s / Stop / Resume, then small SVG charts
-    (humidity with the target as a dashed line, and temperature), 1 h / 24 h / 7 d.
-    The reading's age ("12 s ago") turns red when stale or unreachable.
+  - One climate card. Humidity in large type with the target beside it
+    (tap it to open the slider with Save, Turn off, Cancel; "Off" with
+    "Turn on" when there's none), and a 40–100 % scale bar under both:
+    a fill for the humidity, a tick for the target. Then temperature and the
+    reading's age (red when stale, unreachable or no sensor answers), the
+    pump's status line with Run 1 s / Stop / Resume (no Stop while control
+    is off and the pump is idle), and the history: small SVG charts
+    (humidity with the target as a dashed line, and temperature),
+    1 h / 24 h / 7 d.
   - Pieces on the shelf in the API's order: number, photo, form, dryness
     word, estimate. "Rough guess" while learning. Tapping a piece opens its
     page, where its events are (the list has no event buttons, on purpose).
