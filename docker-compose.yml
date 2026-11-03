@@ -12,10 +12,14 @@ services:
     ports:
       - "80:8080"               # http://atelier over Tailscale
     devices:
-      - /dev/i2c-1:/dev/i2c-1   # enable I²C first (raspi-config)
+      - /dev/i2c-1:/dev/i2c-1   # enable I²C first: sudo raspi-config nonint do_i2c 0
       # The pump relay. On current Pi 5 kernels the header pins are on
       # gpiochip0 (labelled pinctrl-rp1); older kernels used gpiochip4.
       - /dev/gpiochip0:/dev/gpiochip0
+      # The small screen (SCREEN=st7789). Enable SPI first (raspi-config →
+      # Interface Options → SPI), then uncomment: the container won't start
+      # if this device doesn't exist.
+      # - /dev/spidev0.0:/dev/spidev0.0
     volumes:
       - ./data:/data            # database, photos and backups
     environment:
@@ -34,3 +38,10 @@ services:
       # - PUMP_PULSE=10s
       # - PUMP_REST=3m
       # - PUMP_MAX_RH=95
+      # The 1.9" ST7789 screen next to the Pi: humidity and temperature.
+      # Wiring (BCM numbers) is in the README; these are the defaults.
+      - SCREEN=none             # none | st7789
+      # - SCREEN_DC=25
+      # - SCREEN_RST=27
+      # - SCREEN_BL=18
+      # - SCREEN_FLIP=false     # true if it's mounted upside down

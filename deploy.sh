@@ -9,6 +9,7 @@ IMAGE=qqrtos/humiditycontrol:latest
 
 docker build --platform linux/arm64 -t "$IMAGE" .
 docker push "$IMAGE"
-scp docker-compose.yml "$PI_USER@$PI_HOST:$PI_DIR/docker-compose.yml"
-ssh "$PI_USER@$PI_HOST" "cd $PI_DIR && docker compose pull && docker compose up -d"
+# One SSH session (one password prompt): copy the compose file over stdin,
+# then pull and restart.
+ssh "$PI_USER@$PI_HOST" "cd $PI_DIR && cat > docker-compose.yml && docker compose pull && docker compose up -d" < docker-compose.yml
 echo "Deployed to $ENV."

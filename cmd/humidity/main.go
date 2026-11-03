@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -101,6 +102,11 @@ func run() error {
 			if err != nil {
 				return fmt.Errorf("sensor %s: %w", addr, err)
 			}
+			// Carry on without it: the app shows the read errors, and
+			// readings start once the sensor is connected.
+			if err := sht.Reset(); err != nil {
+				log.Printf("sensor %s: %v", addr, err)
+			}
 			sensors = append(sensors, sht)
 		default:
 			return fmt.Errorf("SENSOR must be sht4x, sht3x or sim, not %q", kind)
@@ -126,6 +132,14 @@ func run() error {
 	}
 	wg.Go(func() { a.SensorLoop(ctx, sensors) })
 
+	screen, err := openScreen(dataDir)
+	if err != nil {
+		return err
+	}
+	if screen != nil {
+		wg.Go(func() { a.DisplayLoop(ctx, screen) })
+	}
+
 	srv := &http.Server{Addr: env("ADDR", ":8080"), Handler: a.Handler()}
 	go func() {
 		<-ctx.Done()
@@ -133,8 +147,8 @@ func run() error {
 		defer cancel()
 		srv.Shutdown(shutdownCtx)
 	}()
-	log.Printf("listening on %s (sensors %s %v, pump %s, data in %s)",
-		srv.Addr, kind, addrs, env("PUMP", "none"), dataDir)
+	log.Printf("listening on %s (sensors %s %v, pump %s, screen %s, data in %s)",
+		srv.Addr, kind, addrs, env("PUMP", "none"), env("SCREEN", "none"), dataDir)
 	err = srv.ListenAndServe()
 	stop() // if the server failed, stop the loops too
 	wg.Wait()
@@ -143,6 +157,43 @@ func run() error {
 		return nil
 	}
 	return err
+}
+
+// openScreen opens the small screen next to the Pi, or returns nil for none.
+func openScreen(dataDir string) (hw.Screen, error) {
+	switch kind := env("SCREEN", "none"); kind {
+	case "none":
+		return nil, nil
+	case "sim":
+		return hw.PNGScreen{Path: filepath.Join(dataDir, "screen.png")}, nil
+	case "st7789":
+		pin := func(key, def string) (int, error) {
+			n, err := strconv.Atoi(env(key, def))
+			if err != nil {
+				return 0, fmt.Errorf("%s: want a BCM GPIO number: %w", key, err)
+			}
+			return n, nil
+		}
+		dc, err := pin("SCREEN_DC", "25")
+		if err != nil {
+			return nil, err
+		}
+		rst, err := pin("SCREEN_RST", "27")
+		if err != nil {
+			return nil, err
+		}
+		bl, err := pin("SCREEN_BL", "18")
+		if err != nil {
+			return nil, err
+		}
+		flip, err := strconv.ParseBool(env("SCREEN_FLIP", "false"))
+		if err != nil {
+			return nil, fmt.Errorf("SCREEN_FLIP: %w", err)
+		}
+		return hw.OpenST7789("/dev/spidev0.0", dc, rst, bl, flip)
+	default:
+		return nil, fmt.Errorf("SCREEN must be none, st7789 or sim, not %q", kind)
+	}
 }
 
 func env(key, def string) string {

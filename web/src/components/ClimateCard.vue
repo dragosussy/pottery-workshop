@@ -19,9 +19,14 @@ const status = computed(() => {
   if (live.unreachable) return live.nowAt ? `Can't reach the shelf · last update ${ago(live.clock - live.nowAt)}` : "Can't reach the shelf"
   if (!live.now) return 'Loading…'
   if (room.value) return ago(live.clock - Date.parse(room.value.at))
-  const times = live.now.sensors.map((s) => (s.at ? Date.parse(s.at) : 0))
-  const newest = Math.max(0, ...times)
-  return newest ? `No fresh reading · last ${ago(live.clock - newest)}` : 'No reading yet'
+  const sensors = live.now.sensors
+  const newest = Math.max(0, ...sensors.map((s) => (s.at ? Date.parse(s.at) : 0)))
+  const last = newest ? ` · last reading ${ago(live.clock - newest)}` : ''
+  // Every sensor failing to answer: usually not connected or miswired.
+  if (sensors.length && sensors.every((s) => s.error)) {
+    return newest ? `Sensor not responding${last}` : 'No sensor connected'
+  }
+  return newest ? `No fresh reading${last}` : 'No reading yet'
 })
 const bad = computed(() => live.unreachable || (!!live.now && !room.value))
 

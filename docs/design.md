@@ -13,6 +13,8 @@ Raspberry Pi 5 next to the shelf:
 
 - reads one or two SHT31/SHT4x humidity sensors over I²C;
 - runs a misting pump (relay on a GPIO pin) to hold a humidity target;
+- shows the room's humidity and temperature on a small 1.9" ST7789 screen
+  (SPI) beside it;
 - keeps a list of the pottery pieces on the shelf, with the potter's dryness
   checks, and estimates when each piece will be leather hard (trimmable);
 - serves a phone web app over Tailscale at `http://atelier` (plain HTTP, no
@@ -53,6 +55,13 @@ battery so the clock is right straight after boot.
   "today", "tomorrow" or "yesterday", and otherwise always carry the date, so
   next Tuesday is never mistaken for tomorrow.
 - A list of finished pieces (trimmed/discarded).
+
+**The screen next to the Pi**
+- A 1.9" 170 × 320 IPS module (ST7789, SPI), used in landscape: "Humidity",
+  the value in large type, and the temperature underneath; "no reading" when
+  no sensor has reported for 30 s. It redraws when the values change (checked
+  every 5 s, in the same process as the sensor loop, not over HTTP) and goes
+  dark when the app stops. Wiring is in the README.
 
 **Housekeeping**
 - A daily database backup on the Pi (7 kept; photos aren't included), and a
@@ -427,19 +436,24 @@ cmd/humidity/main.go     env config, open db and hardware, start the loops and
 internal/hw/             sht.go (SHT3x/SHT4x over i2c-dev, CRC, retries),
                          pump.go (gpiocdev relay: off at open, active-low option,
                          Pi 5 header chip found by its label pinctrl-rp1),
+                         st7789_linux.go (the screen: spidev writes plus GPIO
+                         data/command, reset and backlight lines),
+                         screen.go (RGB565 packing, PNGScreen for a laptop),
                          sim.go (fake sensor + fake pump that raises its humidity)
 internal/app/            db.go (schema, queries), loop.go (poll sensors every 5 s,
                          latest values, minute rows, daily backup), pump.go (the
-                         controller), pieces.go (piece operations), http.go
+                         controller), display.go (draws the screen with the Go
+                         fonts), pieces.go (piece operations), http.go
                          (routes, handlers, static files)
 internal/predict/        predict.go: the pure function in §3
 web/                     the Vue app; embed.go embeds web/dist
 ```
 
-Long-running goroutines besides HTTP: the sensor loop and the pump loop. The
-pump loop reads the latest values from the sensor loop (a mutex-guarded
-struct). The only interfaces are the two hardware seams, `Sensor` and
-`Switch`, each with a real and a sim implementation.
+Long-running goroutines besides HTTP: the sensor loop, the pump loop and the
+display loop. The pump and display loops read the latest values from the
+sensor loop (a mutex-guarded struct). The only interfaces are the three
+hardware seams, `Sensor`, `Switch` and `Screen`, each with a real and a sim
+implementation.
 
 ### Configuration (environment)
 
@@ -455,6 +469,11 @@ struct). The only interfaces are the two hardware seams, `Sensor` and
 | `PUMP_PULSE` | `10s` | |
 | `PUMP_REST` | `3m` | |
 | `PUMP_MAX_RH` | `95` | |
+| `SCREEN` | `none` | `none`, `st7789` or `sim` (writes `$DATA_DIR/screen.png`) |
+| `SCREEN_DC` | `25` | BCM GPIO of the screen's data/command pin |
+| `SCREEN_RST` | `27` | BCM GPIO of its reset pin |
+| `SCREEN_BL` | `18` | BCM GPIO of its backlight pin |
+| `SCREEN_FLIP` | `false` | `true` turns the picture upside down |
 
 Everything else (poll interval, backups kept, I²C bus) is a constant.
 

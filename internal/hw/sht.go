@@ -64,8 +64,8 @@ type SHT struct {
 }
 
 // OpenSHT connects to the sensor at addr (e.g. 0x44) on bus (e.g.
-// /dev/i2c-1) and soft-resets it, so a missing or miswired sensor fails here
-// rather than on the first poll.
+// /dev/i2c-1). It fails only if the bus can't be opened: a missing sensor
+// shows up as read errors, and reads start working once it's connected.
 func OpenSHT(v Variant, bus string, addr uint16) (*SHT, error) {
 	dev, err := openDevice(bus, addr)
 	if err != nil {
@@ -79,18 +79,23 @@ func OpenSHT(v Variant, bus string, addr uint16) (*SHT, error) {
 	return s, nil
 }
 
-// NewSHT wraps an open device and soft-resets the sensor.
+// NewSHT wraps an open device.
 func NewSHT(v Variant, dev Device) (*SHT, error) {
 	fam, ok := families[v]
 	if !ok {
 		return nil, fmt.Errorf("unknown SHT variant %d", v)
 	}
-	s := &SHT{dev: dev, fam: fam}
-	if err := s.write(fam.reset); err != nil {
-		return nil, fmt.Errorf("soft reset (is the sensor connected at this address?): %w", err)
+	return &SHT{dev: dev, fam: fam}, nil
+}
+
+// Reset soft-resets the sensor; an error usually means it isn't connected
+// at this address.
+func (s *SHT) Reset() error {
+	if err := s.write(s.fam.reset); err != nil {
+		return fmt.Errorf("soft reset (is the sensor connected at this address?): %w", err)
 	}
-	time.Sleep(fam.resetWait)
-	return s, nil
+	time.Sleep(s.fam.resetWait)
+	return nil
 }
 
 // Read retries a few times: a disturbed bus transaction or a checksum error

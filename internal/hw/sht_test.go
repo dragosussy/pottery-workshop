@@ -103,7 +103,7 @@ func TestDecode_ChecksumErrors(t *testing.T) {
 	}
 }
 
-func TestNew_SoftResets(t *testing.T) {
+func TestReset(t *testing.T) {
 	for _, tc := range []struct {
 		variant Variant
 		reset   []byte
@@ -112,8 +112,12 @@ func TestNew_SoftResets(t *testing.T) {
 		{SHT4x, []byte{0x94}},
 	} {
 		dev := &fakeDevice{}
-		if _, err := NewSHT(tc.variant, dev); err != nil {
+		s, err := NewSHT(tc.variant, dev)
+		if err != nil {
 			t.Fatalf("NewSHT() error: %v", err)
+		}
+		if err := s.Reset(); err != nil {
+			t.Fatalf("Reset() error: %v", err)
 		}
 		if len(dev.writes) != 1 || !bytes.Equal(dev.writes[0], tc.reset) {
 			t.Errorf("variant %d: writes = %x, want one reset %x", tc.variant, dev.writes, tc.reset)
@@ -121,10 +125,14 @@ func TestNew_SoftResets(t *testing.T) {
 	}
 }
 
-func TestNew_NoSensor(t *testing.T) {
+func TestReset_NoSensor(t *testing.T) {
 	dev := &fakeDevice{writeErr: errors.New("remote I/O error")}
-	if _, err := NewSHT(SHT4x, dev); err == nil {
-		t.Error("NewSHT() succeeded without a responding sensor")
+	s, err := NewSHT(SHT4x, dev)
+	if err != nil {
+		t.Fatalf("NewSHT() error: %v", err)
+	}
+	if err := s.Reset(); err == nil {
+		t.Error("Reset() succeeded without a responding sensor")
 	}
 }
 
@@ -145,9 +153,9 @@ func TestRead_RetriesThenSucceeds(t *testing.T) {
 	if !near(temp, 25.0) || !near(rh, 56.5) {
 		t.Errorf("Read() = %.2f%% %.2f°C", rh, temp)
 	}
-	// reset + three measurement commands
-	if len(dev.writes) != 4 || !bytes.Equal(dev.writes[3], []byte{0xFD}) {
-		t.Errorf("writes = %x, want reset then 3× FD", dev.writes)
+	// three measurement commands
+	if len(dev.writes) != 3 || !bytes.Equal(dev.writes[2], []byte{0xFD}) {
+		t.Errorf("writes = %x, want 3× FD", dev.writes)
 	}
 }
 

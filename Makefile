@@ -2,11 +2,12 @@
 
 .PHONY: dev test web build build-pi clean
 
-# The backend with the simulated sensor and pump, and the Vite dev server
-# (it proxies /api to :8080). Ctrl-C stops both.
+# The backend with the simulated sensor, pump and screen (the screen is
+# drawn to ./data/screen.png), and the Vite dev server (it proxies /api to
+# :8080). Ctrl-C stops both.
 dev:
 	@trap 'kill 0' INT TERM EXIT; \
-	SENSOR=sim PUMP=sim DATA_DIR=./data go run ./cmd/humidity & \
+	SENSOR=sim PUMP=sim SCREEN=sim DATA_DIR=./data go run ./cmd/humidity & \
 	npm --prefix web run dev & \
 	wait
 
