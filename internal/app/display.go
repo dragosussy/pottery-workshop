@@ -28,7 +28,8 @@ var (
 )
 
 // DisplayLoop keeps the screen next to the Pi showing the room's humidity
-// and temperature. It redraws when the shown values change (checked at each
+// and temperature, and the target (or that humidity control is off). It
+// redraws when the shown values change (checked at each
 // sensor read), and blanks the screen when ctx ends.
 func (a *App) DisplayLoop(ctx context.Context, s hw.Screen) {
 	defer s.Close()
@@ -42,12 +43,13 @@ func (a *App) DisplayLoop(ctx context.Context, s hw.Screen) {
 	shown := ""
 	for {
 		room, ok := a.Live.Room(time.Now())
-		key := "no reading"
+		target := a.Live.Target()
+		key := fmt.Sprintf("no reading %d", target)
 		if ok {
-			key = fmt.Sprintf("%.1f %.1f", room.RH, room.Temp)
+			key = fmt.Sprintf("%.1f %.1f %d", room.RH, room.Temp, target)
 		}
 		if key != shown {
-			if err := s.Show(renderScreen(faces, room, ok)); err != nil {
+			if err := s.Show(renderScreen(faces, room, ok, target)); err != nil {
 				log.Printf("display: %v", err)
 			} else {
 				shown = key
@@ -84,9 +86,9 @@ func newScreenFaces() (screenFaces, error) {
 	}, nil
 }
 
-// renderScreen draws one frame: a label, the humidity in large type, and
-// the temperature underneath.
-func renderScreen(f screenFaces, room Room, ok bool) *image.RGBA {
+// renderScreen draws one frame: a label and the target (0: control off) on
+// top, the humidity in large type, and the temperature underneath.
+func renderScreen(f screenFaces, room Room, ok bool, target int) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, hw.ScreenWidth, hw.ScreenHeight))
 	draw.Draw(img, img.Bounds(), image.NewUniform(screenBG), image.Point{}, draw.Src)
 	text := func(face font.Face, c color.Color, x, y int, s string) int {
@@ -96,6 +98,11 @@ func renderScreen(f screenFaces, room Room, ok bool) *image.RGBA {
 	}
 
 	text(f.label, screenMuted, 16, 30, "Humidity")
+	right := "Control off"
+	if target > 0 {
+		right = fmt.Sprintf("Target %d %%", target)
+	}
+	text(f.label, screenMuted, hw.ScreenWidth-16-font.MeasureString(f.label, right).Round(), 30, right)
 	if !ok {
 		text(f.big, screenMuted, 14, 118, "–")
 		text(f.temp, screenWarn, 16, 158, "no reading")

@@ -12,8 +12,8 @@ import (
 const placeholder = `<!doctype html>
 <meta charset="utf-8">
 <title>Humidity</title>
-<p>This binary was built without the web app. Run <code>make build</code>,
-or <code>make dev</code> for the Vite dev server. The API is at
+<p>This binary was built without the web app: use the Docker image, or
+<code>make dev</code> for the Vite dev server. The API is at
 <a href="/api/now">/api/now</a>.</p>
 `
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The shelf's climate in one card: humidity now next to its target (with a
-// Change control), temperature, how old the reading is, the pump, and the
+// Change control; no target means humidity control is off), temperature, how old the reading is, the pump, and the
 // charts.
 import { computed, ref, watch } from 'vue'
 import { api, type History, type Now } from '@/api'
@@ -95,8 +95,9 @@ watch(
       </div>
       <div v-if="now" class="target">
         <div class="label">Target</div>
-        <div class="big num">{{ now.target === null ? '–' : now.target }}<small v-if="now.target !== null"> %</small></div>
-        <button v-if="!editing" type="button" class="btn btn-small" @click="startEdit">Change</button>
+        <div v-if="now.target === null" class="big off">Off</div>
+        <div v-else class="big num">{{ now.target }}<small> %</small></div>
+        <button v-if="!editing" type="button" class="btn btn-small" @click="startEdit">{{ now.target === null ? 'Turn on' : 'Change' }}</button>
       </div>
     </div>
     <p class="small" :class="bad ? 'bad' : 'muted'">
@@ -107,7 +108,7 @@ watch(
       <PreciseSlider v-model="draft" :min="50" :max="now.max_rh - 1" :step="1" unit=" %" label="Humidity target" :last="now.target" />
       <div class="row">
         <button type="button" class="btn btn-primary" :disabled="busy" @click="run(() => api.setTarget(draft), targetSaved)">Save</button>
-        <button type="button" class="btn" :disabled="busy" @click="run(() => api.setTarget(null), targetSaved)">Clear</button>
+        <button v-if="now.target !== null" type="button" class="btn" :disabled="busy" @click="run(() => api.setTarget(null), targetSaved)">Turn off</button>
         <button type="button" class="btn btn-ghost" @click="close">Cancel</button>
       </div>
     </template>
@@ -168,6 +169,9 @@ watch(
 }
 .target .big {
   color: var(--accent);
+}
+.target .big.off {
+  color: var(--text-muted);
 }
 .pump {
   display: grid;

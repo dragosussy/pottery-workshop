@@ -33,7 +33,8 @@ battery so the clock is right straight after boot.
 
 **Humidity target and pump**
 - One target (whole percent, 50 up to `PUMP_MAX_RH` − 1), or none. The pump
-  holds it.
+  holds it. No target means humidity control is off (e.g. the shelf is empty
+  and left open): the app and the screen show "Off", readings carry on.
 - Pump state on the home screen: running / resting / idle / stopped, and why.
 - Run the pump by hand (the app's button runs it for 1 s, to test the wiring
   or prime it), Stop it (it stays stopped until Resume), and Resume.
@@ -58,8 +59,8 @@ battery so the clock is right straight after boot.
 
 **The screen next to the Pi**
 - A 1.9" 170 × 320 IPS module (ST7789, SPI), used in landscape: "Humidity",
-  the value in large type, and the temperature underneath; "no reading" when
-  no sensor has reported for 30 s. It redraws when the values change (checked
+  the value in large type, and the temperature underneath; "Target 80 %" or
+  "Control off" top right; "no reading" when no sensor has reported for 30 s. It redraws when the values change (checked
   every 5 s, in the same process as the sensor loop, not over HTTP) and goes
   dark when the app stops. Wiring is in the README.
 
@@ -508,7 +509,8 @@ styles/         tokens.css (the "tide" palette, light/dark), base.css
 - **Home `/`**
   - One climate card: humidity now and the target side by side, in large
     type (with a
-    "Change" control: slider, Save, Clear), temperature, the pump's status
+    "Change" control: slider, Save, Turn off; with no target it shows "Off"
+    and "Turn on"), temperature, the pump's status
     line with its reason and Run 1 s / Stop / Resume, then small SVG charts
     (humidity with the target as a dashed line, and temperature), 1 h / 24 h / 7 d.
     The reading's age ("12 s ago") turns red when stale or unreachable.

@@ -100,7 +100,6 @@ export function endedText(p: Piece): string {
 
 const PUMP_STATUS = { running: 'Misting', resting: 'Resting after a pulse', idle: 'Idle', stopped: 'Stopped' }
 const PUMP_REASONS: Record<string, string> = {
-  no_target: 'no target set',
   no_data: 'no humidity reading',
   at_target: 'humidity is at the target',
   above_max: 'a sensor reads at or above the safety limit',
@@ -110,6 +109,7 @@ const PUMP_REASONS: Record<string, string> = {
 }
 
 export function pumpText(pump: Now['pump']): string {
+  if (pump.reason === 'no_target') return 'Off'
   const status = PUMP_STATUS[pump.status]
   const reason = pump.reason ? (PUMP_REASONS[pump.reason] ?? pump.reason) : ''
   return reason ? `${status}: ${reason}` : status

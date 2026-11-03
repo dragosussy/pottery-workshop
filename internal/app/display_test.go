@@ -17,7 +17,7 @@ func TestRenderScreen(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, ok := range []bool{true, false} {
-		img := renderScreen(faces, Room{RH: 81.2, Temp: 18.6}, ok)
+		img := renderScreen(faces, Room{RH: 81.2, Temp: 18.6}, ok, 80)
 		if b := img.Bounds(); b.Dx() != hw.ScreenWidth || b.Dy() != hw.ScreenHeight {
 			t.Fatalf("frame is %v", b)
 		}

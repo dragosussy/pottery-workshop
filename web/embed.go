@@ -1,6 +1,6 @@
 //go:build embedweb
 
-// Package web holds the built web app (web/dist). `make build` builds it
+// Package web holds the built web app (web/dist). The Dockerfile builds it
 // and compiles it in with -tags embedweb.
 package web
 
