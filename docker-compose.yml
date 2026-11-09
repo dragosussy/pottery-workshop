@@ -13,6 +13,18 @@ services:
       # docs/deployment.md) is the way in, so the local network has no access.
       - "127.0.0.1:8080:80"
 
+  glaze:
+    image: qqrtos/glaze:latest
+    container_name: glaze
+    restart: always
+    logging:                    # keep logs bounded on the SD card
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - ./data/glaze:/data      # database, photos and backups
+
   backup:
     image: qqrtos/atelier-backup:latest
     container_name: backup

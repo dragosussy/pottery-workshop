@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"atelier/apps/humidity/internal/hw"
+
+	"atelier/shared/kit"
 )
 
 const (
@@ -216,7 +218,7 @@ func (a *App) SensorLoop(ctx context.Context, sensors []hw.Sensor) {
 		}
 
 		if day := now.Format(time.DateOnly); day != backedUp {
-			if err := dailyBackup(a.DB, a.DataDir, now); err != nil {
+			if err := kit.DailySnapshot(a.DB, a.DataDir, now); err != nil {
 				log.Printf("backup: %v", err) // tried again tomorrow
 			}
 			backedUp = day

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, watchEffect } from 'vue'
-import { api, apiUrl } from '@/api'
+import { apiUrl } from '@ui/http'
+import { api } from '@/api'
 import { ago } from '@/format'
 import { live, say, sayError, setNow } from '@/live'
 

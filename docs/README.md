@@ -17,9 +17,10 @@
   and API.
 - [Ideas](apps/humidity/ideas.md): next steps and things deliberately left out.
 
-**glaze notebook**, recipes, tests and results (planned):
+**glaze**, the notebook of recipes, tests and results:
 
-- [Design](apps/glaze/design.md): draft of what it solves and how.
+- [Overview and local development](apps/glaze/README.md)
+- [Design](apps/glaze/design.md): the problem, how it's used, data and API.
 
 ## Contributing
 

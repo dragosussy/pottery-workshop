@@ -1,5 +1,5 @@
-/* Design tokens: the "tide" palette. Light by default, dark via
-   prefers-color-scheme. Wet → dry scale: dark water-blue to pale clay. */
+/* Design tokens every app shares: the "tide" palette. Light by default, dark
+   via prefers-color-scheme. */
 :root {
   color-scheme: light dark;
 
@@ -21,15 +21,8 @@
   --warn-soft: #fff0c7;
   --danger: #b3261e;
   --danger-soft: #fbe2df;
-  --temp: #a0522d;
-  --dry-0: #123a5a;
-  --dry-1: #1f5f86;
-  --dry-2: #3f86a8;
-  --dry-3: #7fb2c6;
-  --dry-4: #c4dde4;
-  --dry-5: #f1f0e8;
-  --trim-band: rgba(29, 122, 67, 0.18);
-  --trim-band-edge: rgba(29, 122, 67, 0.6);
+  --band: rgba(29, 122, 67, 0.18);
+  --band-edge: rgba(29, 122, 67, 0.6);
 
   --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-num: ui-rounded, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -66,15 +59,8 @@
     --warn-soft: #3a2d0e;
     --danger: #ff8a80;
     --danger-soft: #3d1a17;
-    --temp: #e0a07a;
-    --dry-0: #0f3150;
-    --dry-1: #1b5378;
-    --dry-2: #3a7c9e;
-    --dry-3: #73a7bc;
-    --dry-4: #b7d3dc;
-    --dry-5: #ebeae2;
-    --trim-band: rgba(95, 208, 139, 0.2);
-    --trim-band-edge: rgba(95, 208, 139, 0.65);
+    --band: rgba(95, 208, 139, 0.2);
+    --band-edge: rgba(95, 208, 139, 0.65);
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
   }
 }

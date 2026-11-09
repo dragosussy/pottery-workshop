@@ -1,7 +1,7 @@
 # Glaze notebook: design
 
-**Status: draft, nothing is built yet.** This page sets out what the app is
-for and how it would work.
+What the app does and how it's built. Getting started is in the
+[README](README.md).
 
 ## 1. The problem
 
@@ -69,9 +69,13 @@ firing ─────┘        │                                            
 - **Recipe version:** the ingredients of a material we mix ourselves.
   Commercial products have none.
 - **Firing:** one kiln load, recorded once and shared by everything in it.
-- **Position:** where a piece sat in that load: bottom, middle or top shelf,
-  and at the edge or in the middle of it. It's recorded per piece, because
-  that's where the kiln differs.
+  There's one kiln, so at most one load is in progress: it's being loaded, then
+  firing, then unloaded.
+- **Position:** where a piece sat in that load. The kiln is about 5 units wide,
+  3 deep and 3 high, so a position is a height (bottom, middle or top) and a
+  point on a map of the shelf at that height, tapped by eye. It's recorded per
+  piece, because that's where the kiln differs. Edge or middle is worked out
+  from the point.
 
 ### Rules that keep the records trustworthy
 
@@ -86,8 +90,9 @@ firing ─────┘        │                                            
 - **Only the identity of a piece is required:** a number for a tile, a photo
   for a pot. Clay, layers, firing, position and result can all be filled in
   later or never.
-- **Records from memory are marked.** One flag says a piece was filled in
-  afterwards, so a guess never looks like a measurement.
+- **Records made after firing are marked.** A piece logged once it was already
+  fired shows "Logged after firing", so a detail remembered later never looks
+  like one written down at the time.
 
 ### Glaze thickness
 
@@ -118,14 +123,16 @@ last had, so a typical layer is one or two taps. A material that isn't in the
 list can be added by name from the same screen. Slip put on at leather hard
 starts a record, and the glaze layers join it weeks later.
 
-**Loading the kiln.** Create the firing, choosing its schedule from earlier
-ones or typing a new one. Then, shelf by shelf, tap the pieces going on that
-shelf from the list of those on the bench, and mark edge or middle. This is
-also the last reminder: anything going in that isn't on the list gets logged
+**Loading the kiln.** The Kiln tab shows the one kiln in whichever state it's
+in. "Start loading" brings up a map of its three heights, seen from above, bottom
+shelf first as that's the order it's loaded.
+Choose a piece from those to be glazed and tap where it sits, at whichever
+height, and the next piece is chosen for you. "Start firing" then
+asks for the schedule. This is also the last reminder: anything going in that isn't on the list gets logged
 now, while it's still in front of you.
 
-**Unloading the kiln.** The firing page walks through its pieces shelf by
-shelf, with a "next" button: take a photo, tap a rating, tick any defects.
+**Unloading the kiln.** "Unload" starts a walk through its pieces shelf by
+shelf, showing where each sat, with a "next" button: take a photo, tap a rating, tick any defects.
 Pots are identified by the photo taken when they were logged, together with
 where they sat. A photo alone can't separate similar pots with different
 stacks, since raw glaze looks pale and chalky, so position does real work here.
@@ -147,18 +154,20 @@ copied and new layers added on top. The new record gets its own firing,
 position, photos and result, and the old one stays as it came out. A tile
 keeps its number, and looking it up shows the latest record with a link back.
 
-**Choosing a glaze.** A material's page shows its results as a photo grid,
+**Choosing a glaze.** A material's tile folds open to its results as a photo grid,
 grouped by clay body, so both what it does and what's never been tried are
 visible. Each photo is captioned with its schedule and position, which can
 also be filtered on, so a result that only happens on the hot shelf is easy to
 spot. A keepers gallery shows everything rated great.
 
-**Mixing a batch.** A recipe page scales to a batch size: enter 3000 g and get
-the weight of each ingredient.
+**Mixing a batch.** A recipe is written in parts by weight, split into the base
+and what goes on top of it, and shows each as a share of the base. Say how much
+base to mix and it gives the weight of each ingredient and the water to start
+with.
 
-**Clearing the backlog.** A short form: number, clay, photo, rating, and
-whatever's known about the stack. It remembers the last clay body and offers
-"Add another". Records are marked as from memory by default.
+**Clearing the backlog.** Answering "Already fired" on the log form asks for a
+rating and leaves unknown details blank. It remembers the last clay body and
+offers "Save and add another".
 
 ## 5. Data
 
@@ -185,6 +194,8 @@ CREATE TABLE recipes (             -- one row per version
   material_id INTEGER NOT NULL REFERENCES materials(id),
   version INTEGER NOT NULL,
   change_note TEXT NOT NULL DEFAULT '',
+  water REAL,                      -- to start with, in the same parts as the lines
+  consistency TEXT NOT NULL DEFAULT '',  -- what to aim for once mixed
   created_at INTEGER NOT NULL,
   UNIQUE (material_id, version)
 );
@@ -198,7 +209,8 @@ CREATE TABLE recipe_lines (
 );
 CREATE TABLE firings (
   id INTEGER PRIMARY KEY,
-  fired_on TEXT,                   -- YYYY-MM-DD, null if not known
+  state TEXT NOT NULL,             -- loading | firing | unloaded; one unfinished at a time
+  fired_on TEXT,                   -- YYYY-MM-DD, set when firing starts if not given
   cone TEXT NOT NULL DEFAULT '',
   schedule TEXT NOT NULL DEFAULT '',  -- free text, suggested from earlier firings
   notes TEXT NOT NULL DEFAULT ''
@@ -210,7 +222,9 @@ CREATE TABLE pieces (
   clay_body_id INTEGER REFERENCES clay_bodies(id),
   firing_id INTEGER REFERENCES firings(id),
   level TEXT,                      -- bottom | middle | top
-  spot TEXT,                       -- edge | middle
+  pos_x REAL,                      -- 0–1, from the left of the shelf
+  pos_y REAL,                      -- 0–1, from the front of the kiln
+  spot TEXT,                       -- edge | middle, worked out from pos_x and pos_y
   refire_of INTEGER REFERENCES pieces(id),
   notes TEXT NOT NULL DEFAULT '',
   from_memory INTEGER NOT NULL DEFAULT 0,
@@ -238,16 +252,18 @@ CREATE TABLE piece_defects (
   PRIMARY KEY (piece_id, defect)
 );
 CREATE TABLE photos (
-  id INTEGER PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,  -- never reused: photos are cached by id
   piece_id INTEGER NOT NULL REFERENCES pieces(id) ON DELETE CASCADE,
   stage TEXT NOT NULL,             -- before | after
   created_at INTEGER NOT NULL
 );
 ```
 
-- **A piece's state is derived:** a rating means `done`, otherwise a firing
-  means `waiting for result`, otherwise `on the bench`. The backlog form
-  always asks for a rating, since those tiles are already fired.
+- **A piece's state is derived:** a rating means `done`. Otherwise no firing
+  means `bench` (shown as "To be glazed"), a firing still in progress means
+  `kiln`, and an unloaded firing means `waiting` for its result. An old tile
+  always gets a rating, since it's already fired.
+- **Only a load that's being loaded takes new pieces.**
 - **A tile needs a number and a pot needs a photo.** The server checks the
   number, and the log form won't save a pot without a photo.
 - **A re-fire** copies the earlier record's layers, keeps its tile number and
@@ -259,7 +275,11 @@ CREATE TABLE photos (
   the material has more than one.
 - **Scaling a recipe** treats non-additions as the base. Each amount becomes
   `amount / base total × batch size`, for additions as well.
-- **Oxide washes** are recipes too, with water as an ingredient.
+- **Water** belongs to a recipe version: an amount to start with, in the same
+  parts as the ingredients, and the consistency to aim for, since the rest is
+  done by feel. It isn't recorded per layer.
+- **Oxide washes** are recipes too: the oxide, anything else in it such as CMC
+  or a thickener, and its water, scaled from how much water you use.
 - **Unknown materials:** "Unknown blue" is a legitimate material for the
   backlog. That keeps every layer linked to something searchable.
 - **Photos** are files `photos/<id>.jpg`, processed on the server as in
@@ -269,18 +289,20 @@ CREATE TABLE photos (
 
 ## 6. Screens
 
-Vue on a phone-first layout, like humidity.
+Vue on a phone-first layout, like humidity. Four tabs sit at the bottom of
+every screen except forms and the result walk, and Back always returns to where
+you came from.
 
-| Screen | What's on it |
+| Tab | What's on it |
 |---|---|
-| Home | Find-by-number box, "Log a piece", on the bench, waiting for result by firing |
-| Piece | Photos, the stack in order as steps to repeat, clay, firing and position, result, "Do this again", "Re-fire" |
-| Log / edit | The capture form from §4; one short variant for the backlog |
-| Firing | Details, its pieces by shelf, loading by shelf, the one-by-one result walk |
-| Browse | Thumbnail grid of tiles or pots, filtered by material, clay body, schedule, shelf level, edge or middle, rating, defect or text; keepers is one filter |
-| Materials | The list, by kind |
-| Material | Recipe with versions and batch scaling, results grouped by clay body |
-| Settings | Clay bodies, backup download |
+| Now | Find a tile by number, "Log a piece", results still to enter, the kiln's status, what's to be glazed |
+| Kiln | The one kiln: empty, being loaded (the map and what's to place) or firing. Past firings are a link |
+| Pieces | Search, quick filters for keepers, tiles and pots, and more filters folded away |
+| Glazes | Materials by kind, each a tile that folds open in place to its results per clay body, recipe, versions and batch scaling |
+
+A piece shows its journey (To be glazed, In the kiln, Fired) and one main
+action for where it is on it: add what went on, enter the result, or do this
+again.
 
 ## 7. Left out on purpose
 
@@ -301,8 +323,7 @@ Vue on a phone-first layout, like humidity.
 
 **Why not an existing tool or a spreadsheet?** Recipe sites such as Glazy are
 built around recipes and chemistry. Our gap is capturing a stack against a
-hand-numbered tile during a session and finding it again from the object. I
-haven't evaluated Glazy in depth, so it's worth a look before building. A
+hand-numbered tile during a session and finding it again from the object. A
 spreadsheet handles recipes but is poor at photos, ordered stacks and fast
 phone entry.
 
@@ -312,37 +333,45 @@ Same stack as humidity: one Go binary embedding a Vue app, SQLite through
 modernc, in `apps/glaze/`, and the rules in
 [Architecture](../../architecture.md#rules-every-app-follows) apply, including
 using the [shared code](../../architecture.md#shared-code).
-`GET /api/summary` returns the counts for the homepage tile: on the bench and
-waiting for result. No new dependencies are expected, and there's no hardware
-code, so no simulator either.
+`GET /api/summary` returns the counts for the homepage tile: to be glazed, in
+the kiln and waiting for a result. There's no hardware code, so no simulator either.
 
 | Area | Implication |
 |---|---|
 | **Data safety** | Backups today cover only the database and stay on the SD card. Here, photos are the record, so **glaze depends on the [off-device backups](../../architecture.md#data), which include photos,** being set up and restored successfully at least once before real data goes in. |
 | **Availability** | The Pi stays on from now on, so the notebook is there whenever people glaze or want to look something up. |
 | **Hardware** | The app doesn't touch the pump, sensors or screen. But with the Pi always on, humidity's pump control runs whenever a target is saved, so a target left set on an empty shelf keeps misting. |
-| **Other apps** | The gateway goes in first. It moves humidity to `/humidity/` and its data to `data/humidity/`, which is a manual step on the Pi. Glaze is then an ordinary route at `/glaze/`, with its data in `data/glaze/`. |
+| **Other apps** | Glaze is an ordinary route at `/glaze/`, with its data in `data/glaze/`. It doesn't talk to humidity. |
 | **Use** | Two or three people, mostly on their own phones. Recently used materials are worked out from the layers, so everyone sees the same list. If two people save the same record, the last save wins, which is fine at this scale. |
-| **Repo changes** | `deploy.sh` takes an app name, the root `Makefile` gets the new app, and `go.mod` gets another `ignore` line for its `node_modules`. |
 | **Storage** | Around 0.5 MB per photo, so thousands of photos fit, but on the SD card. |
-| **Docs** | The README table, architecture status table and deployment page change when the app ships, and so does humidity's design page, which says the Pi is switched off between sessions. This page becomes the description of what was built. |
 
 Tests cover what would quietly damage the records: frozen recipe versions,
 duplicate numbers (and re-fires keeping theirs), state derivation, archive
 instead of delete and batch scaling, plus one HTTP walk-through from logging
 to result.
 
-## 9. Build order
+## 9. HTTP API
 
-The gateway comes first, as its own change. Each step after it is usable by
-itself.
+JSON in and out, with errors as `{"error": "message"}`. A piece is saved whole:
+the client sends the full record, layers included.
 
-1. **Capture and lookup:** clay bodies, materials, pieces, layers with
-   thickness, photos, find by number, the backlog form. Off-device backups
-   have to work by the end of this step, because real data starts here.
-2. **The kiln cycle:** firings, loading by shelf, the result walk, the bench
-   and waiting lists, "Do this again", "Re-fire".
-3. **Recipes:** versions, the freeze rule, batch scaling, choosing a version
-   on a layer.
-4. **Finding things:** browse and filters, keepers, a material's results by
-   clay body.
+| Method + path | What it does |
+|---|---|
+| `GET /api/summary` | The homepage tile |
+| `GET /api/suggestions` | Ingredients, schedules and cones typed before |
+| `GET, POST /api/clay-bodies`, `PUT, DELETE …/{id}` | Clay bodies; deleting one in use is a 409 |
+| `GET, POST /api/materials`, `GET, PUT, DELETE …/{id}` | Materials; deleting one in use is a 409 |
+| `PUT /api/materials/{id}/recipe` | Corrects the newest version if unused, otherwise adds the next |
+| `GET, POST /api/firings`, `GET, PUT, DELETE …/{id}` | Firings; a second load in progress or deleting one with pieces is a 409 |
+| `PUT /api/firings/{id}/state` | Moves a load between loading, firing and unloaded |
+| `GET /api/pieces` | Filters: `number`, `state`, `kind`, `material`, `clay`, `firing`, `schedule`, `level`, `spot`, `rating`, `defect`, `q` |
+| `POST /api/pieces`, `GET, PUT, DELETE …/{id}` | One piece; a tile number already taken is a 409 |
+| `POST /api/pieces/{id}/photos?stage=` | Adds a photo: the raw image, up to 25 MB |
+| `GET /api/photos/{id}`, `…/thumb`, `DELETE …/{id}` | A photo and its thumbnail |
+| `GET /api/backup` | A fresh copy of the database |
+
+Lists come newest first, 60 at a time with `offset`. `?firing=` returns the
+whole load instead, bottom shelf first.
+
+The server's configuration is `ADDR` (default `:8080`) and `DATA_DIR` (default
+`/data`).

@@ -8,7 +8,7 @@ import { api, type History, type Now } from '@/api'
 import { ago, pumpText } from '@/format'
 import { live, refreshShelf, sayError, setNow } from '@/live'
 import LineChart from './LineChart.vue'
-import PreciseSlider from './PreciseSlider.vue'
+import PreciseSlider from '@ui/PreciseSlider.vue'
 
 /** A short test run, enough to hear the pump and see the mist. */
 const TEST_SECONDS = 1

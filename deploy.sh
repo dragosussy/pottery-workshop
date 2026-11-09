@@ -1,13 +1,14 @@
 #!/bin/bash
 # Builds one image for the Pi, pushes it and restarts that one service there.
-# Usage: ./deploy.sh gateway|backup|humidity   (reads PI_USER, PI_HOST and PI_DIR from .env)
+# Usage: ./deploy.sh gateway|backup|humidity|glaze   (reads PI_USER, PI_HOST and PI_DIR from .env)
 set -euo pipefail
 
 case "${1:-}" in
   gateway)  SERVICE=gateway          IMAGE=qqrtos/atelier-gateway:latest  DOCKERFILE=gateway/Dockerfile ;;
   backup)   SERVICE=backup           IMAGE=qqrtos/atelier-backup:latest   DOCKERFILE=backup/Dockerfile ;;
   humidity) SERVICE=humiditycontrol  IMAGE=qqrtos/humiditycontrol:latest  DOCKERFILE=apps/humidity/Dockerfile ;;
-  *) echo "Usage: ./deploy.sh gateway|backup|humidity" >&2; exit 2 ;;
+  glaze)    SERVICE=glaze            IMAGE=qqrtos/glaze:latest            DOCKERFILE=apps/glaze/Dockerfile ;;
+  *) echo "Usage: ./deploy.sh gateway|backup|humidity|glaze" >&2; exit 2 ;;
 esac
 
 source .env

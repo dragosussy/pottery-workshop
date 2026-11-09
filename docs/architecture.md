@@ -13,12 +13,10 @@ independent apps. A homepage is the way into all of them.
 | Tailnet-only access | Done |
 | Each app's data in `data/<app>/` on the Pi | Done |
 | Off-device backups | Built, waiting for its Cloudflare setup on the Pi |
-| Glaze notebook | Planned |
-| `shared/` code | Planned, with glaze |
+| Glaze notebook | Built |
+| `shared/` code | Done |
 
 ## How it fits together
-
-Glaze is planned; the rest is running.
 
 ```
 phone or laptop ── Tailscale ──> Pi "atelier"
@@ -48,7 +46,9 @@ phone or laptop ── Tailscale ──> Pi "atelier"
 ```
 atelier/
 ├── apps/
-│   └── humidity/         the app: cmd, internal, web, Dockerfile, Makefile
+│   ├── humidity/         the app: cmd, internal, web, Dockerfile, Makefile
+│   └── glaze/            the same shape
+├── shared/               code every app uses: see below
 ├── gateway/              the Caddyfile, the homepage and its list of apps
 ├── backup/               the daily copy of every app's data to Cloudflare R2
 ├── docs/                 all documentation
@@ -58,11 +58,6 @@ atelier/
 ├── Makefile              checks for the whole repo
 └── go.mod
 ```
-
-Planned additions:
-
-- `apps/glaze/`: the glaze notebook.
-- `shared/`: see [Shared code](#shared-code).
 
 ## Rules every app follows
 
@@ -84,13 +79,12 @@ An app in this repo:
 ## Shared code
 
 Apps run independently, but they shouldn't each solve the same problem their
-own way or look like different products. Both folders are planned and arrive
-with glaze, the first app to need them.
+own way or look like different products.
 
 | Folder | What's in it | Why |
 |---|---|---|
-| `shared/ui/` | Design tokens, base styles and any Vue component used by more than one app | Every app and the homepage look the same. It starts from humidity's styles. |
-| `shared/kit/` | Go code: photo processing, database snapshots, JSON error handling | Every app stores photos and reports errors the same way |
+| `shared/ui/` | Design tokens, base styles, the API client and any Vue component used by more than one app | Every app and the homepage look the same. Apps import it as `@ui/`. |
+| `shared/kit/` | Go code: photo processing, opening SQLite, database snapshots, JSON and errors over HTTP | Every app stores photos and reports errors the same way |
 
 - Code moves here when a second app needs it, not before and not as a copy.
 - Moving code here must leave the app it came from behaving the same.

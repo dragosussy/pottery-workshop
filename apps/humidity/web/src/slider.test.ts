@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classify, fineFactor, fraction, keyValue, snap, valueAt } from './slider'
+import { classify, fineFactor, fraction, keyValue, snap, valueAt } from '@ui/slider'
 
 const dryness = { min: 0, max: 5, step: 0.1 }
 const target = { min: 50, max: 94, step: 1 }

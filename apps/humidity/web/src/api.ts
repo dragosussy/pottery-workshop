@@ -1,6 +1,8 @@
 // Types and calls for the HTTP API (docs/apps/humidity/design.md §6). Times are RFC 3339 UTC
 // strings; history arrays use unix seconds.
 
+import { apiCaller } from '@ui/http'
+
 export type Form = 'bowl' | 'mug' | 'plate' | 'vase' | 'other'
 export type Size = 'small' | 'medium' | 'large' | 'xlarge'
 export type Thickness = 'thin' | 'medium' | 'thick'
@@ -84,51 +86,7 @@ export interface PiecePatch {
   dryness?: number
 }
 
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number, // 0: no response
-  ) {
-    super(message)
-  }
-}
-
-/** An API path as the browser must request it, under the app's URL prefix. */
-export const apiUrl = (path: string) => `${import.meta.env.BASE_URL}api${path}`
-
-async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const init: RequestInit = { method, headers: {} }
-  if (body instanceof Blob) {
-    init.body = body
-    init.headers = { 'Content-Type': body.type || 'application/octet-stream' }
-  } else if (body !== undefined) {
-    init.body = JSON.stringify(body)
-    init.headers = { 'Content-Type': 'application/json' }
-  }
-  const abort = new AbortController()
-  const timer = setTimeout(() => abort.abort(), 20_000)
-  init.signal = abort.signal
-  let res: Response
-  try {
-    res = await fetch(apiUrl(path), init)
-  } catch {
-    throw new ApiError("Can't reach the shelf. Check the Wi-Fi or Tailscale.", 0)
-  } finally {
-    clearTimeout(timer)
-  }
-  if (!res.ok) {
-    let message = `${res.status} ${res.statusText}`
-    try {
-      const j = (await res.json()) as { error?: string }
-      if (j.error) message = j.error
-    } catch {
-      // not JSON; keep the status line
-    }
-    throw new ApiError(message, res.status)
-  }
-  if (res.status === 204) return undefined as T
-  return (await res.json()) as T
-}
+const call = apiCaller("Can't reach the shelf. Check the Wi-Fi or Tailscale.")
 
 export const api = {
   now: () => call<Now>('GET', '/now'),

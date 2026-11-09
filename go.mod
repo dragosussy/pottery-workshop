@@ -24,3 +24,4 @@ require (
 
 // The frontend's npm dependencies may ship Go files; they aren't ours.
 ignore ./apps/humidity/web/node_modules
+ignore ./apps/glaze/web/node_modules

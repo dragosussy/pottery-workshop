@@ -1,11 +1,11 @@
 <script setup lang="ts">
-// The one control that gets care (plan §8): the potter's feel is the
+// The one control that gets care: the potter's feel is the
 // measurement. Drag moves the value relative to where it was (no jump when
 // grabbing the thumb), a tap jumps, holding the finger below the track while
 // dragging gives ½× / ¼× steps, ± buttons repeat while held, arrows work.
 // The readout sits above the track so a finger never covers it.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { GRAB_RADIUS, clamp, classify, fineFactor, fraction, keyValue, snap, valueAt, type Scale } from '@/slider'
+import { GRAB_RADIUS, clamp, classify, fineFactor, fraction, keyValue, snap, valueAt, type Scale } from './slider'
 
 const props = withDefaults(
   defineProps<{
@@ -20,9 +20,13 @@ const props = withDefaults(
     last?: number | null
     /** A marked band, e.g. the trim band [2.8, 3.6]. */
     band?: [number, number] | null
+    /** Says so under the readout while the value is in the band. */
+    bandLabel?: string
+    /** A CSS background for the track, when the scale has its own colours. */
+    gradient?: string
     disabled?: boolean
   }>(),
-  { words: null, unit: '', last: null, band: null, disabled: false },
+  { words: null, unit: '', last: null, band: null, bandLabel: '', gradient: undefined, disabled: false },
 )
 const model = defineModel<number>({ required: true })
 /** Set true by any change the user makes; the parent resets it. */
@@ -183,7 +187,7 @@ function nudgeClick(dir: number, e: MouseEvent) {
         <div class="ps-main">{{ readout }}</div>
         <div class="ps-sub muted">
           <span v-if="words" class="num">{{ number }}</span>
-          <span v-if="inBand" class="ps-band-word">✂ trim band</span>
+          <span v-if="inBand && bandLabel" class="ps-band-word">{{ bandLabel }}</span>
           <span v-if="factor < 1" class="ps-fine">fine {{ factor === 0.5 ? '½' : '¼' }}×</span>
         </div>
       </div>
@@ -195,7 +199,7 @@ function nudgeClick(dir: number, e: MouseEvent) {
       @pointerdown="onDown" @pointermove="onMove" @pointerup="onUp" @pointercancel="end" @keydown="onKey"
     >
       <div v-if="band" class="ps-band" :style="{ '--b0': pct(band[0]), '--b1': pct(band[1]) }"></div>
-      <div class="ps-bar" :class="{ dryness: !!words }"></div>
+      <div class="ps-bar" :style="gradient ? { background: gradient } : undefined"></div>
       <div v-if="last !== null" class="ps-last" :style="{ '--p': pct(last) }" title="Last recorded"></div>
       <div class="ps-thumb" :class="{ untouched: !touched }"></div>
     </div>
@@ -277,14 +281,13 @@ function nudgeClick(dir: number, e: MouseEvent) {
   background: var(--surface-3);
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
 }
-.ps-bar.dryness { background: linear-gradient(to right, var(--dry-0), var(--dry-1) 20%, var(--dry-2) 40%, var(--dry-3) 60%, var(--dry-4) 80%, var(--dry-5)); }
 .ps-band {
   top: 8px;
   bottom: 8px;
   left: calc(var(--inset) + var(--b0) * (100% - 2 * var(--inset)));
   width: calc((var(--b1) - var(--b0)) * (100% - 2 * var(--inset)));
-  background: var(--trim-band);
-  border: 2px solid var(--trim-band-edge);
+  background: var(--band);
+  border: 2px solid var(--band-edge);
   border-radius: 6px;
 }
 .ps-last,

@@ -1,0 +1,22 @@
+/* Colours only this app shows. Wet → dry scale: dark water-blue to pale clay. */
+:root {
+  --temp: #a0522d;
+  --dry-0: #123a5a;
+  --dry-1: #1f5f86;
+  --dry-2: #3f86a8;
+  --dry-3: #7fb2c6;
+  --dry-4: #c4dde4;
+  --dry-5: #f1f0e8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --temp: #e0a07a;
+    --dry-0: #0f3150;
+    --dry-1: #1b5378;
+    --dry-2: #3a7c9e;
+    --dry-3: #73a7bc;
+    --dry-4: #b7d3dc;
+    --dry-5: #ebeae2;
+  }
+}

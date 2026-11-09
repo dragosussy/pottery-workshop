@@ -5,6 +5,8 @@
 
 export const STAGES = ['Very wet', 'Wet', 'Soft leather hard', 'Leather hard', 'Hard leather hard', 'Bone dry'] as const
 export const TRIM_BAND: [number, number] = [2.8, 3.6]
+export const DRYNESS_GRADIENT =
+  'linear-gradient(to right, var(--dry-0), var(--dry-1) 20%, var(--dry-2) 40%, var(--dry-3) 60%, var(--dry-4) 80%, var(--dry-5))'
 
 const tenths = (v: number) => Math.round(v * 10)
 

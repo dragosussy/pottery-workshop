@@ -5,9 +5,9 @@
 import { onBeforeUnmount, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api, type Form, type Size, type Thickness } from '@/api'
-import Choice from '@/components/Choice.vue'
-import PreciseSlider from '@/components/PreciseSlider.vue'
-import { TRIM_BAND, drynessWords } from '@/dryness'
+import Choice from '@ui/Choice.vue'
+import PreciseSlider from '@ui/PreciseSlider.vue'
+import { DRYNESS_GRADIENT, TRIM_BAND, drynessWords } from '@/dryness'
 import { FORMS, SIZES, THICKNESSES } from '@/format'
 import { bumpPhotos, refreshShelf, say, sayError } from '@/live'
 
@@ -90,7 +90,7 @@ async function submit() {
       <Choice v-model="f.thickness" label="Walls" :options="THICKNESSES" />
       <div>
         <strong>Starting dryness</strong>
-        <PreciseSlider v-model="f.dryness" :min="0" :max="5" :step="0.1" :band="TRIM_BAND" :words="drynessWords" label="Starting dryness" />
+        <PreciseSlider v-model="f.dryness" :min="0" :max="5" :step="0.1" :band="TRIM_BAND" band-label="✂ trim band" :gradient="DRYNESS_GRADIENT" :words="drynessWords" label="Starting dryness" />
       </div>
       <label class="field">Label (optional)
         <input v-model="f.label" class="input" maxlength="100" placeholder="e.g. blue glaze test" />

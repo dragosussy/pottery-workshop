@@ -1,0 +1,93 @@
+/* What only this app needs, built on the shared tokens. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--sp-3);
+}
+.badge {
+  display: inline-block;
+  padding: 2px var(--sp-2);
+  border-radius: 999px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+.badge.great {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.badge.failed {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.badge.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.notice {
+  padding: var(--sp-3);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+}
+.stack {
+  margin: 0;
+  padding-left: 1.5em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.section-title {
+  font-weight: 600;
+}
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+/* Room for the tab bar, and messages sit above it. */
+:root {
+  --fire: #e8590c;
+  --fire-glow: rgba(232, 89, 12, 0.35);
+  --tab-bar: 64px;
+  --message-offset: var(--tab-bar);
+}
+.page {
+  padding-bottom: calc(var(--tab-bar) + 32px + env(safe-area-inset-bottom));
+}
+details.more > summary {
+  min-height: var(--touch);
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  cursor: pointer;
+}
+.more-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+/* A kiln that's firing, wherever it's shown. */
+.fire {
+  background: linear-gradient(70deg, #a61e1e, #e8590c, #f59f00, #e8590c, #a61e1e);
+  background-size: 300% 100%;
+  color: #fff;
+  animation: burn 7s linear infinite;
+}
+@keyframes burn {
+  to {
+    background-position: -300% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fire {
+    animation: none;
+  }
+}

@@ -20,9 +20,9 @@ Raspberry Pi 5 next to the shelf:
 - serves a phone web app over Tailscale at `http://atelier/humidity/` (plain
   HTTP, no auth; the tailnet is the boundary).
 
-The Pi is switched off between throwing sessions (days or weeks). Nothing
-special happens about that: the history simply has a gap. Fit the Pi 5's RTC
-battery so the clock is right straight after boot.
+The Pi stays on. If it's ever off, nothing special happens: the history simply
+has a gap. Fit the Pi 5's RTC battery so the clock is right straight after
+boot.
 
 ## 2. Features
 
@@ -500,11 +500,10 @@ stream. About 2,100 lines in `web/src`:
 api.ts          the §6 types and calls
 live.ts         shared state, polling, the message bar (with Undo)
 dryness.ts      dryness words ("Leather hard, a touch soft")
-slider.ts       slider maths (pure, tested)
 format.ts       labels, times, estimate and pump wording
 views/          HomeView, PieceView, AddView, FinishedView, SettingsView
-components/     ClimateCard, PreciseSlider, LineChart, PieceRow, Choice
-styles/         tokens.css (the "tide" palette, light/dark), base.css
+components/     ClimateCard, LineChart, PieceRow
+styles/         dryness.css (the colours only this app shows)
 ```
 
 - **Polling.** `GET /api/now` every 5 s while the page is visible; the piece
@@ -551,14 +550,14 @@ Photos load from `/api/pieces/{id}/photo?v=<something that changes after an
 upload>`; the server sends `Last-Modified` (`http.ServeFile`).
 
 **The slider** is the one place that gets care: the potter's feel is the
-measurement. One `PreciseSlider` component used for dryness (0–5, 0.1) and
+measurement. One `PreciseSlider` component, from `shared/ui/`, used for dryness (0–5, 0.1) and
 the target (50–`max_rh`−1, 1): drag relative to the thumb, tap to jump, finer
 steps while the finger is held below the track, big ± buttons with
 hold-to-repeat, a readout in words ("Leather hard, a touch soft"), a ring at
 the last value, and the 2.8–3.6 band marked. `touch-action: pan-y` lets the
 page scroll.
 
-Colours: the current "tide" palette, light and dark. Labels and enums are
+Colours: the shared "tide" palette, light and dark. Labels and enums are
 constants in the frontend.
 
 ## 9. Tests

@@ -132,8 +132,7 @@ The apps should feel like one product. Moving between them, or from the
 homepage into one, shouldn't look like changing software.
 
 - Every app uses the same design tokens, base styles and shared components
-  from `shared/ui/`. That folder is planned and arrives with glaze. Until
-  then, humidity's `web/src/styles/` is the reference.
+  from `shared/ui/`.
 - Before building a control or layout, check whether one already exists. When
   a second app needs a component, move it to `shared/ui/` rather than copying
   it.

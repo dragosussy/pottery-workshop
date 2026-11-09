@@ -31,7 +31,7 @@ Run from the repo root:
 
 ```sh
 make test
-./deploy.sh humidity    # or: gateway, backup
+./deploy.sh humidity    # or: gateway, backup, glaze
 ```
 
 `deploy.sh` builds that arm64 image, pushes it, copies `docker-compose.yml` to

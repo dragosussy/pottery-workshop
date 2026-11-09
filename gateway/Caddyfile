@@ -10,6 +10,16 @@
 		reverse_proxy humiditycontrol:8080
 	}
 
+	redir /glaze /glaze/
+	handle_path /glaze/* {
+		reverse_proxy glaze:8080
+	}
+
+	handle_path /ui/* {
+		root * /ui
+		file_server
+	}
+
 	handle {
 		root * /srv
 		file_server

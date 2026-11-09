@@ -2,7 +2,11 @@
 // shelf list every 30 s while the page is visible, and the shelf after
 // every write. One 1 s timer also drives the "12 s ago" clocks.
 import { reactive } from 'vue'
-import { api, apiUrl, type Now, type Piece, type PiecePatch } from './api'
+import { apiUrl } from '@ui/http'
+import { bar, say, sayError } from '@ui/messages'
+import { api, type Now, type Piece, type PiecePatch } from './api'
+
+export { say, sayError }
 
 export const live = reactive({
   now: null as Now | null,
@@ -16,8 +20,6 @@ export const live = reactive({
   clock: Date.now(),
   /** Changes after a photo upload or delete, so photo URLs refetch. */
   photoVersion: Number(read('humidity.photoVersion')) || 1,
-  /** A message at the bottom of the screen. */
-  message: null as { text: string; error: boolean; undo?: () => Promise<unknown> } | null,
   /** Piece ids in shelf order when the current walk started ("Next piece →"). */
   walk: null as number[] | null,
   /** Bumped after an Undo, so an open piece page reloads. */
@@ -42,19 +44,10 @@ export function bumpPhotos() {
   }
 }
 
-let messageTimer: ReturnType<typeof setTimeout> | undefined
-
-/** Shows a message; with `undo`, it carries an Undo button for a few seconds. */
-export function say(text: string, error = false, undo?: () => Promise<unknown>) {
-  live.message = { text, error, undo }
-  clearTimeout(messageTimer)
-  messageTimer = setTimeout(() => (live.message = null), error ? 8000 : undo ? 8000 : 5000)
-}
-
 /** Runs the message's undo, then refreshes the shelf. */
 export async function undoLast() {
-  const undo = live.message?.undo
-  live.message = null
+  const undo = bar.message?.undo
+  bar.message = null
   if (!undo) return
   try {
     await undo()
@@ -64,10 +57,6 @@ export async function undoLast() {
     sayError(e)
   }
   void refreshShelf()
-}
-
-export function sayError(e: unknown) {
-  say(e instanceof Error ? e.message : String(e), true)
 }
 
 export function setNow(n: Now) {

@@ -3,14 +3,9 @@ package app
 import (
 	"context"
 	"database/sql"
-	"fmt"
-	"log"
-	"os"
-	"path/filepath"
-	"slices"
 	"time"
 
-	_ "modernc.org/sqlite"
+	"atelier/shared/kit"
 )
 
 // migrations are applied in order; PRAGMA user_version counts the applied
@@ -45,52 +40,9 @@ CREATE INDEX checks_piece ON checks(piece_id, at);
 CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `}
 
-const backupsKept = 7
-
-// OpenDB opens $dataDir/humidity.db, creating it and the photos and backups
-// directories as needed, and brings the schema up to date.
+// OpenDB opens $dataDir/humidity.db and brings the schema up to date.
 func OpenDB(dataDir string) (*sql.DB, error) {
-	for _, dir := range []string{"photos", "backups"} {
-		if err := os.MkdirAll(filepath.Join(dataDir, dir), 0o755); err != nil {
-			return nil, err
-		}
-	}
-	dsn := "file:" + filepath.Join(dataDir, "humidity.db") +
-		"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
-	db, err := sql.Open("sqlite", dsn)
-	if err != nil {
-		return nil, err
-	}
-	if err := migrate(db); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("migrate: %w", err)
-	}
-	return db, nil
-}
-
-func migrate(db *sql.DB) error {
-	var version int
-	if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
-		return err
-	}
-	for i := version; i < len(migrations); i++ {
-		tx, err := db.Begin()
-		if err != nil {
-			return err
-		}
-		if _, err := tx.Exec(migrations[i]); err != nil {
-			tx.Rollback()
-			return err
-		}
-		if _, err := tx.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, i+1)); err != nil {
-			tx.Rollback()
-			return err
-		}
-		if err := tx.Commit(); err != nil {
-			return err
-		}
-	}
-	return nil
+	return kit.OpenDB(dataDir, "humidity.db", migrations)
 }
 
 func loadSettings(db *sql.DB) (map[string]string, error) {
@@ -156,31 +108,4 @@ func history(ctx context.Context, db *sql.DB, now time.Time, step, buckets int64
 		h.T, h.RH, h.Temp = append(h.T, t), append(h.RH, rh), append(h.Temp, temp)
 	}
 	return h, rows.Err()
-}
-
-// dailyBackup writes backups/YYYY-MM-DD.db unless today's exists, then
-// keeps only the newest backupsKept.
-func dailyBackup(db *sql.DB, dataDir string, now time.Time) error {
-	dir := filepath.Join(dataDir, "backups")
-	path := filepath.Join(dir, now.Format("2006-01-02")+".db")
-	if _, err := os.Stat(path); err == nil {
-		return nil
-	}
-	if _, err := db.Exec(`VACUUM INTO ?`, path); err != nil {
-		return err
-	}
-	log.Printf("backup: wrote %s", path)
-
-	old, err := filepath.Glob(filepath.Join(dir, "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].db"))
-	if err != nil {
-		return err
-	}
-	slices.Sort(old)
-	for len(old) > backupsKept {
-		if err := os.Remove(old[0]); err != nil {
-			return err
-		}
-		old = old[1:]
-	}
-	return nil
 }

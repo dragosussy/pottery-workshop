@@ -2,9 +2,9 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, type Piece, type PiecePatch } from '@/api'
-import Choice from '@/components/Choice.vue'
-import PreciseSlider from '@/components/PreciseSlider.vue'
-import { TRIM_BAND, drynessWords } from '@/dryness'
+import Choice from '@ui/Choice.vue'
+import PreciseSlider from '@ui/PreciseSlider.vue'
+import { DRYNESS_GRADIENT, TRIM_BAND, drynessWords } from '@/dryness'
 import { FORMS, SIZES, STATES, THICKNESSES, endedText, estimateParts, pieceTitle, specs, when } from '@/format'
 import { bumpPhotos, live, markPiece, photoUrl, refreshShelf, say, sayError } from '@/live'
 
@@ -173,7 +173,7 @@ async function changePhoto(e: Event) {
         <h2>How dry is it now?</h2>
         <PreciseSlider
           v-model="dryness" v-model:touched="touched" :min="0" :max="5" :step="0.1" :band="TRIM_BAND"
-          :last="piece.last_check.dryness" :words="drynessWords" :label="`Dryness of #${piece.number}`"
+          band-label="✂ trim band" :gradient="DRYNESS_GRADIENT" :last="piece.last_check.dryness" :words="drynessWords" :label="`Dryness of #${piece.number}`"
         />
         <p class="muted small">Ring: last check, {{ piece.last_check.dryness.toFixed(1) }} on {{ when(piece.last_check.at) }}</p>
         <button type="button" class="btn btn-primary btn-block" :disabled="busy" @click="saveCheck">Save check</button>

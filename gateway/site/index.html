@@ -4,94 +4,272 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#0f6f68" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#11302e" media="(prefers-color-scheme: dark)" />
     <title>Atelier</title>
+    <link rel="stylesheet" href="/ui/tokens.css" />
+    <link rel="stylesheet" href="/ui/base.css" />
     <style>
       :root {
-        color-scheme: light dark;
-        --bg: #f2f5f7;
-        --surface: #ffffff;
-        --border: #bfcad3;
-        --text: #0f1c26;
-        --text-muted: #4a5a66;
-        --accent: #0f6f68;
+        --glaze: var(--accent);
+        --on-glaze: var(--accent-text);
+        --on-glaze-soft: rgba(255, 255, 255, 0.78);
+        --wrap: 60rem;
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #0b1218;
-          --surface: #121c24;
-          --border: #2f4150;
-          --text: #e6eef3;
-          --text-muted: #a9bac6;
-          --accent: #4fd1c5;
+          /* The bright dark-mode accent is too loud across a whole band. */
+          --glaze: var(--accent-soft);
+          --on-glaze: var(--accent);
+          --on-glaze-soft: var(--text-muted);
         }
       }
-      body {
-        margin: 0;
-        background: var(--bg);
-        color: var(--text);
-        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+      /* The header: a coat of glaze running down from the top of the page. */
+      .door {
+        background: var(--glaze);
+        color: var(--on-glaze);
+        padding: calc(36px + env(safe-area-inset-top)) var(--sp-4) 0;
       }
-      main {
-        max-width: 32rem;
+      .door > div {
+        max-width: var(--wrap);
         margin: 0 auto;
-        padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
       }
-      h1 {
-        margin: 0 0 16px;
-        font-size: 1.5rem;
+      .door h1 {
+        font-size: clamp(2.75rem, 11vw, 4rem);
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -0.03em;
       }
-      a {
+      .door p {
+        margin-top: var(--sp-2);
+        color: var(--on-glaze-soft);
+      }
+      .drips {
         display: block;
-        margin-bottom: 12px;
-        padding: 16px;
+        width: 100%;
+        height: 76px;
+      }
+
+      main {
+        max-width: calc(var(--wrap) + 2 * var(--sp-4));
+        margin: -6px auto 0;
+        padding: 0 var(--sp-4) calc(40px + env(safe-area-inset-bottom));
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+        gap: var(--sp-3);
+        position: relative;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 56px 1fr auto;
+        column-gap: var(--sp-4);
+        align-items: center;
+        min-height: 112px;
+        padding: var(--sp-4);
         background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 14px;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
         color: inherit;
         text-decoration: none;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        touch-action: manipulation;
       }
-      a:active {
-        border-color: var(--accent);
+      .app:active {
+        transform: scale(0.985);
       }
-      strong {
+      @media (hover: hover) {
+        .app:hover {
+          transform: translateY(-2px);
+          box-shadow: var(--shadow), 0 0 0 2px var(--accent);
+        }
+      }
+      .glyph {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 56px;
+        height: 56px;
+        border-radius: var(--radius);
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 1.5rem;
+        font-weight: 800;
+      }
+      .glyph svg {
+        width: 34px;
+        height: 34px;
+      }
+      .name {
         display: block;
-        font-size: 1.25rem;
-      }
-      span {
-        display: block;
-        min-height: 1.4em;
-        margin-top: 4px;
         color: var(--text-muted);
+        font-weight: 600;
+      }
+      .headline {
+        display: block;
+        margin-top: 2px;
+        font-family: var(--font-num);
+        font-size: 1.625rem;
+        font-weight: 800;
+        line-height: 1.2;
+        letter-spacing: -0.01em;
+      }
+      .detail {
+        display: block;
+        margin-top: 2px;
+        color: var(--text-muted);
+        font-size: var(--fs-sm);
+      }
+      .arrow {
+        color: var(--text-faint);
+        font-size: var(--fs-xl);
+        line-height: 1;
+      }
+
+      /* An app that doesn't answer: still a working link, just saying so. */
+      .app.down .headline {
+        color: var(--danger);
+        font-size: var(--fs-lg);
+        margin-top: var(--sp-1);
+      }
+      .app.down .glyph {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      /* While the first answer is on its way. */
+      .app.loading .headline,
+      .app.loading .detail {
+        width: 62%;
+        height: 1.625rem;
+        margin-top: var(--sp-1);
+        border-radius: 6px;
+        background: var(--surface-3);
+        animation: pulse 1.2s ease-in-out infinite alternate;
+      }
+      .app.loading .detail {
+        width: 84%;
+        height: 0.875rem;
+      }
+      @keyframes pulse {
+        to {
+          opacity: 0.4;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .app {
+          transition: none;
+        }
+        .app.loading .headline,
+        .app.loading .detail {
+          animation: none;
+        }
       }
     </style>
   </head>
   <body>
-    <main>
-      <h1>Atelier</h1>
-      <nav id="apps"></nav>
-    </main>
-    <script>
-      const apps = [{ name: 'Drying shelf', path: '/humidity/' }]
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <defs>
+        <pattern id="drip" width="720" height="76" patternUnits="userSpaceOnUse">
+          <path
+            style="fill: var(--glaze)"
+            d="M0 0H720V14C705.2 14 701.8 12 687 12C667 12 655.2 16 654.2 30C654.2 39 657 41 657 53A7 7 0 0 1 643 53C643 41 645.8 39 645.8 30C644.8 16 633 12 613 12C595.9 12 592.1 18 575 18C555 18 544.5 22 543.5 36C543.5 17 545 19 545 31A5 5 0 0 1 535 31C535 19 536.5 17 536.5 36C535.5 22 525 18 505 18C488.8 18 485.2 11 469 11C449 11 436.4 15 435.4 29C435.4 51 439 53 439 65A9 9 0 0 1 421 65C421 53 424.6 51 424.6 29C423.6 15 411 11 391 11C366.2 11 360.8 17 336 17C316 17 304.6 21 303.6 35C303.6 26 306 28 306 40A6 6 0 0 1 294 40C294 28 296.4 26 296.4 35C295.4 21 284 17 264 17C220.8 17 211.2 15 168 15C148 15 135.8 19 134.8 33C134.8 42 138 44 138 56A8 8 0 0 1 122 56C122 44 125.2 42 125.2 33C124.2 19 112 15 92 15C50.6 15 41.4 14 0 14Z"
+          />
+        </pattern>
+        <symbol id="shelf" viewBox="0 0 32 32">
+          <path fill="currentColor" d="M16 3s-5 5.600-5 9a5 5 0 0 0 10 0c0-3.400-5-9-5-9Z" />
+          <path fill="currentColor" d="M4 20h24v2.500h-1.600C25.300 26.600 21.500 29 16 29S6.700 26.600 5.600 22.500H4Z" />
+        </symbol>
+        <symbol id="glaze" viewBox="0 0 32 32">
+          <path fill="currentColor" d="M5 5h22v9h-3v7a2 2 0 0 1-4 0v-4a1.500 1.500 0 0 0-3 0v9a2 2 0 0 1-4 0v-8a1.500 1.500 0 0 0-3 0v1a2 2 0 0 1-4 0v-5H5Z" />
+        </symbol>
+      </defs>
+    </svg>
 
-      const tiles = apps.map((app) => {
-        const link = document.createElement('a')
-        link.href = app.path
-        const name = document.createElement('strong')
-        name.textContent = app.name
-        const summary = document.createElement('span')
-        link.append(name, summary)
-        document.getElementById('apps').append(link)
-        return { app, summary }
+    <header class="door">
+      <div>
+        <h1>Atelier</h1>
+        <p id="today"></p>
+      </div>
+    </header>
+    <svg class="drips" aria-hidden="true"><rect width="100%" height="76" fill="url(#drip)" /></svg>
+
+    <main id="apps"></main>
+
+    <script>
+      // One line per app. `icon` names a <symbol> above; without one the tile
+      // shows the app's first letter.
+      const apps = [
+        { name: 'Drying shelf', path: '/humidity/', icon: 'shelf' },
+        { name: 'Glaze notebook', path: '/glaze/', icon: 'glaze' },
+      ]
+
+      document.getElementById('today').textContent = new Date().toLocaleDateString('en-GB', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
       })
 
+      function element(tag, className, parent) {
+        const el = document.createElement(tag)
+        el.className = className
+        parent.append(el)
+        return el
+      }
+
+      function glyph(app, parent) {
+        const box = element('span', 'glyph', parent)
+        box.setAttribute('aria-hidden', 'true')
+        if (app.icon) {
+          box.innerHTML = `<svg><use href="#${app.icon}"></use></svg>`
+        } else {
+          box.textContent = app.name[0]
+        }
+      }
+
+      const list = document.getElementById('apps')
+      const tiles = apps.map((app) => {
+        const link = element('a', 'app loading', list)
+        link.href = app.path
+        glyph(app, link)
+        const text = element('span', '', link)
+        element('span', 'name', text).textContent = app.name
+        const headline = element('span', 'headline', text)
+        const detail = element('span', 'detail', text)
+        const arrow = element('span', 'arrow', link)
+        arrow.textContent = '›'
+        arrow.setAttribute('aria-hidden', 'true')
+        return { app, link, headline, detail }
+      })
+
+      // An app's summary is one line. Its first part, up to " · ", is the headline.
+      function show(tile, text) {
+        const [first, ...rest] = text.split(' · ')
+        tile.link.classList.remove('loading', 'down')
+        tile.headline.textContent = first
+        tile.detail.textContent = rest.join(' · ')
+      }
+
+      function showDown(tile) {
+        tile.link.classList.remove('loading')
+        tile.link.classList.add('down')
+        tile.headline.textContent = 'Not responding'
+        tile.detail.textContent = ''
+      }
+
       // A tile stays a working link even when its app doesn't answer.
-      async function refresh({ app, summary }) {
+      async function refresh(tile) {
+        const abort = new AbortController()
+        const timer = setTimeout(() => abort.abort(), 8000)
         try {
-          const res = await fetch(app.path + 'api/summary')
+          const res = await fetch(tile.app.path + 'api/summary', { signal: abort.signal })
           if (!res.ok) throw new Error(res.statusText)
-          summary.textContent = (await res.json()).text
+          show(tile, (await res.json()).text)
         } catch {
-          summary.textContent = 'Not responding'
+          showDown(tile)
+        } finally {
+          clearTimeout(timer)
         }
       }
 

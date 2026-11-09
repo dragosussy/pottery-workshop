@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -12,6 +11,8 @@ import (
 	"time"
 
 	"atelier/apps/humidity/internal/predict"
+
+	"atelier/shared/kit"
 )
 
 var (
@@ -277,7 +278,7 @@ func (a *App) patchPiece(ctx context.Context, id int64, p piecePatch) error {
 				_, err = tx.Exec(`INSERT INTO checks (piece_id, dryness, at) VALUES (?, ?, ?)`, id, *d, now)
 			}
 		default:
-			return errorf(409, "a piece can't go from %s to %s", from, p.state)
+			return kit.Errorf(409, "a piece can't go from %s to %s", from, p.state)
 		}
 		if err != nil {
 			return err
@@ -331,7 +332,7 @@ func (a *App) addCheck(ctx context.Context, id int64, dryness float64) error {
 		return err
 	}
 	if ended.Valid {
-		return errorf(409, "the piece has ended; put it back first")
+		return kit.Errorf(409, "the piece has ended; put it back first")
 	}
 	if _, err := tx.Exec(`INSERT INTO checks (piece_id, dryness, at) VALUES (?, ?, ?)`, id, dryness, time.Now().Unix()); err != nil {
 		return err
@@ -352,13 +353,13 @@ func (a *App) deleteCheck(ctx context.Context, checkID int64) (int64, error) {
 	err = tx.QueryRow(`SELECT piece_id, (SELECT count(*) FROM checks c WHERE c.piece_id = checks.piece_id)
 		FROM checks WHERE id = ?`, checkID).Scan(&pieceID, &count)
 	if err == sql.ErrNoRows {
-		return 0, errorf(404, "no such check")
+		return 0, kit.Errorf(404, "no such check")
 	}
 	if err != nil {
 		return 0, err
 	}
 	if count == 1 {
-		return 0, errorf(409, "a piece keeps at least one check")
+		return 0, kit.Errorf(409, "a piece keeps at least one check")
 	}
 	if _, err := tx.Exec(`DELETE FROM checks WHERE id = ?`, checkID); err != nil {
 		return 0, err
@@ -393,19 +394,7 @@ func unixTimePtr(s sql.NullInt64) *time.Time {
 
 func roundDryness(d float64) float64 { return math.Round(d*10) / 10 }
 
-// apiError is an error with the HTTP status to answer it with.
-type apiError struct {
-	code int
-	msg  string
-}
-
-func (e *apiError) Error() string { return e.msg }
-
-func errorf(code int, format string, args ...any) error {
-	return &apiError{code, fmt.Sprintf(format, args...)}
-}
-
-var errNoPiece = errorf(404, "no such piece")
+var errNoPiece = kit.Errorf(404, "no such piece")
 
 // climate is what the model needs about the shelf's humidity: the recorded
 // mean for any stretch, and what to expect from now on (the target, else the

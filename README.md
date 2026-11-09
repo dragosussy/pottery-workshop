@@ -6,7 +6,7 @@ phone over Tailscale.
 | App | What it does | Status |
 |---|---|---|
 | [humidity](docs/apps/humidity/README.md) | Holds the drying shelf's humidity and estimates when pieces will be leather hard | In use |
-| Glaze notebook | Logs glaze tests, recipes, results and recipe adjustments | Planned |
+| [glaze](docs/apps/glaze/README.md) | Logs glaze tests, recipes, results and recipe adjustments | Built |
 
 ## Documentation
 
@@ -21,7 +21,7 @@ AI agents working here follow [AGENTS.md](AGENTS.md).
 make dev                     # everything on http://localhost:8000, simulated hardware
 make test                    # every check for every app
 make -C apps/humidity dev    # one app on its own
-./deploy.sh humidity         # build, push and restart on the Pi (or: gateway, backup)
+./deploy.sh humidity         # build, push and restart on the Pi (or: gateway, backup, glaze)
 ```
 
 Deploying is covered in [docs/deployment.md](docs/deployment.md).

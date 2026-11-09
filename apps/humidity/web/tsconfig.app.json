@@ -8,6 +8,10 @@
     "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "paths": { "@/*": ["./src/*"] }
+    "paths": {
+      "@/*": ["./src/*"],
+      "@ui/*": ["../../../shared/ui/*"],
+      "vue": ["./node_modules/vue"]
+    }
   }
 }

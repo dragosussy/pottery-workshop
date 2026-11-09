@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"atelier/apps/humidity/internal/hw"
+
+	"atelier/shared/kit"
 )
 
 // TestHTTP walks through the API with the sim sensor and pump and a fresh
@@ -183,7 +185,7 @@ func TestHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	call("PUT", piecePath+"/photo", []byte("GIF89a"), 400, nil)
-	call("PUT", piecePath+"/photo", append(camera.Bytes(), make([]byte, maxPhoto)...), 413, nil)
+	call("PUT", piecePath+"/photo", append(camera.Bytes(), make([]byte, kit.MaxPhoto)...), 413, nil)
 	call("PUT", piecePath+"/photo", camera.Bytes(), 204, nil)
 	resp := call("GET", piecePath+"/photo", nil, 200, nil)
 	stored, err := jpeg.DecodeConfig(resp.Body)
