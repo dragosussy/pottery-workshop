@@ -2,7 +2,7 @@
 // shelf list every 30 s while the page is visible, and the shelf after
 // every write. One 1 s timer also drives the "12 s ago" clocks.
 import { reactive } from 'vue'
-import { api, type Now, type Piece, type PiecePatch } from './api'
+import { api, apiUrl, type Now, type Piece, type PiecePatch } from './api'
 
 export const live = reactive({
   now: null as Now | null,
@@ -99,7 +99,7 @@ export async function refreshShelf() {
 }
 
 export function photoUrl(id: number) {
-  return `/api/pieces/${id}/photo?v=${live.photoVersion}`
+  return apiUrl(`/pieces/${id}/photo?v=${live.photoVersion}`)
 }
 
 /** Starts polling; returns a function that stops it. */

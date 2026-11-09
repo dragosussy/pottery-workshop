@@ -8,15 +8,17 @@ independent apps. A homepage is the way into all of them.
 | Part | Status |
 |---|---|
 | One repo with apps in `apps/` | Done |
-| humidity app | Running as a single container on port 80 |
-| Gateway and homepage | Planned |
-| Tailnet-only access (today port 80 is also open on the local network) | Planned |
-| Each app's data in `data/<app>/` on the Pi (today humidity uses `data/`) | Planned, with the gateway |
+| humidity app | Running at `/humidity/` |
+| Gateway and homepage | Done |
+| Tailnet-only access | Done |
+| Each app's data in `data/<app>/` on the Pi | Done |
 | Off-device backups | Planned |
 | Glaze notebook | Planned |
 | `shared/` code and npm workspaces | When the second app needs them |
 
-## The target
+## How it fits together
+
+Glaze is planned; the rest is running.
 
 ```
 phone or laptop ── Tailscale ──> Pi "atelier"
@@ -47,6 +49,7 @@ phone or laptop ── Tailscale ──> Pi "atelier"
 atelier/
 ├── apps/
 │   └── humidity/         the app: cmd, internal, web, Dockerfile, Makefile
+├── gateway/              the Caddyfile, the homepage and its list of apps
 ├── docs/                 all documentation
 ├── AGENTS.md             principles for developing here
 ├── docker-compose.yml    everything that runs on the Pi
@@ -57,7 +60,6 @@ atelier/
 
 Planned additions:
 
-- `gateway/`: the Caddyfile, the homepage and the list of apps.
 - `apps/glaze/`: the glaze notebook.
 - `shared/ui/` and `shared/kit/`: common Vue and Go code, added only when a
   second app needs it. Glaze will probably need photo handling, backups, JSON
@@ -74,11 +76,9 @@ An app in this repo:
 3. Keeps all of its state in `/data`.
 4. Writes a daily database snapshot to `/data/backups`.
 5. Shuts down cleanly on SIGTERM.
-6. Offers `GET /api/summary` for its homepage tile.
+6. Offers `GET /api/summary` for its homepage tile, answering
+   `{"text": "one short line"}`.
 7. Caps its logs in `docker-compose.yml`, to protect the SD card.
-
-humidity already follows 1, 3, 4, 5 and 7. It needs 2 and 6 when the gateway
-is added.
 
 ## Data
 
@@ -91,18 +91,17 @@ notebook holds real work.
 
 ## Access
 
-The tailnet is the security boundary, and apps have no logins. Port 80 is
-currently also reachable from the Pi's local network, including the pump
-controls. The plan is for Caddy to listen only on localhost, with Tailscale
-Serve as the only way in. That also makes HTTPS available. This hasn't been
-tried on the Pi yet.
+The tailnet is the security boundary, and apps have no logins. The gateway
+listens only on the Pi's localhost, and Tailscale Serve is the only way in, so
+the local network can't reach the apps or the pump controls.
 
 ## Adding an app
 
-Once the gateway exists:
-
 1. Create `apps/<name>/`, following the rules above.
-2. Add a service to `docker-compose.yml`.
-3. Add a route to the Caddyfile and an entry to the homepage's app list.
-4. Add `docs/apps/<name>/` and link it from [docs/README.md](README.md).
-5. Add the app to `test` in the root `Makefile`.
+2. Add a service to `docker-compose.yml`, with no `ports` of its own.
+3. Add a route to `gateway/Caddyfile` and `gateway/Caddyfile.dev`, and an entry
+   to the homepage's app list.
+4. Add the app's image to `deploy.sh`.
+5. Add `docs/apps/<name>/` and link it from [docs/README.md](README.md).
+6. Add the app to `dev` and `test` in the root `Makefile`, with dev ports no
+   other app uses.

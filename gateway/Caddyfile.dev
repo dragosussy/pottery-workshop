@@ -1,0 +1,21 @@
+# The gateway for `make dev`: like Caddyfile, but each app is its Vite dev
+# server on this computer. Vite expects the URL prefix, so it isn't removed.
+{
+	admin off
+}
+
+:80 {
+	redir /humidity /humidity/
+	handle /humidity/* {
+		reverse_proxy host.docker.internal:5173 {
+			# Vite refuses host names it doesn't know, and a phone can
+			# arrive under any of the computer's names.
+			header_up Host localhost
+		}
+	}
+
+	handle {
+		root * /srv
+		file_server
+	}
+}

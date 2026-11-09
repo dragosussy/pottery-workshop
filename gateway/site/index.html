@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Atelier</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f2f5f7;
+        --surface: #ffffff;
+        --border: #bfcad3;
+        --text: #0f1c26;
+        --text-muted: #4a5a66;
+        --accent: #0f6f68;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0b1218;
+          --surface: #121c24;
+          --border: #2f4150;
+          --text: #e6eef3;
+          --text-muted: #a9bac6;
+          --accent: #4fd1c5;
+        }
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      }
+      main {
+        max-width: 32rem;
+        margin: 0 auto;
+        padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+      }
+      h1 {
+        margin: 0 0 16px;
+        font-size: 1.5rem;
+      }
+      a {
+        display: block;
+        margin-bottom: 12px;
+        padding: 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        color: inherit;
+        text-decoration: none;
+      }
+      a:active {
+        border-color: var(--accent);
+      }
+      strong {
+        display: block;
+        font-size: 1.25rem;
+      }
+      span {
+        display: block;
+        min-height: 1.4em;
+        margin-top: 4px;
+        color: var(--text-muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Atelier</h1>
+      <nav id="apps"></nav>
+    </main>
+    <script>
+      const apps = [{ name: 'Drying shelf', path: '/humidity/' }]
+
+      const tiles = apps.map((app) => {
+        const link = document.createElement('a')
+        link.href = app.path
+        const name = document.createElement('strong')
+        name.textContent = app.name
+        const summary = document.createElement('span')
+        link.append(name, summary)
+        document.getElementById('apps').append(link)
+        return { app, summary }
+      })
+
+      // A tile stays a working link even when its app doesn't answer.
+      async function refresh({ app, summary }) {
+        try {
+          const res = await fetch(app.path + 'api/summary')
+          if (!res.ok) throw new Error(res.statusText)
+          summary.textContent = (await res.json()).text
+        } catch {
+          summary.textContent = 'Not responding'
+        }
+      }
+
+      const refreshAll = () => tiles.forEach(refresh)
+      refreshAll()
+      setInterval(() => document.hidden || refreshAll(), 30_000)
+      document.addEventListener('visibilitychange', () => document.hidden || refreshAll())
+    </script>
+  </body>
+</html>

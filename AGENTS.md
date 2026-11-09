@@ -70,11 +70,50 @@ could change the decision.
 | Apps | `apps/<name>/` |
 | Documentation, for every app | `docs/`, with each app in `docs/apps/<name>/` |
 | What runs on the Pi | `docker-compose.yml` |
-| Dev server for an app | `make -C apps/<name> dev` |
+| Everything for development, at `http://localhost:8000` | `make dev` |
+| One app on its own | `make -C apps/<name> dev` |
 | All checks | `make test` |
 
 - Docs live at the root in `docs/`, never inside an app.
 - Each app has its own design doc. Read it before working on that app.
+
+## Testing
+
+Validate as much as makes sense before calling something done.
+
+- A change in behaviour comes with tests for the normal path, the failures
+  people can really hit (bad input, a conflict, a sensor or app not
+  answering), and anything that could quietly damage data or misdrive
+  hardware.
+- Don't test, or write code for, edge cases that will never happen in this
+  studio. If you can't describe how it would come about, leave it out.
+- Test where it can break. Logic gets unit tests and the API gets the app's
+  HTTP test. Unit tests can't see URLs, the gateway, Docker builds or the
+  browser, so when a change crosses one of those, run the real thing with
+  simulated hardware and check it.
+- When people will see a change, open it and use it at phone width.
+  `make test` passing doesn't show that it works.
+- Say what you tested and how. Name what you couldn't test, such as anything
+  that only exists on the Pi, and give the human the exact steps to check it.
+
+## The dev environment
+
+Starting an app for development has to stay simple, and it has to be testable
+from more than the machine running it.
+
+- One command starts everything: `make dev`, from a fresh clone. If setup
+  needs another step, make the command do it rather than documenting it.
+- Development needs Go, Node and Docker, and no Pi, hardware, accounts or
+  secrets. Hardware and outside services are simulated or optional.
+- Phones and other computers on the tailnet must be able to use the dev
+  server. Keep it listening on all interfaces and accepting tailnet names, and
+  don't hard-code `localhost` into anything the browser uses.
+- The studio uses plain HTTP, in development and on the Pi. Check that a
+  browser feature works without HTTPS before relying on it.
+- Development data stays in the app's own git-ignored `./data`, and deleting
+  it starts the app over.
+- Before finishing a change, check that it hasn't made any of this harder. A
+  new app has to meet all of it from the start.
 
 ## Keeping the docs true
 

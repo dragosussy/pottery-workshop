@@ -1,4 +1,18 @@
 services:
+  gateway:
+    image: qqrtos/atelier-gateway:latest
+    container_name: gateway
+    restart: always
+    logging:                    # keep logs bounded on the SD card
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    ports:
+      # Only this machine can reach it. `tailscale serve` (see
+      # docs/deployment.md) is the way in, so the local network has no access.
+      - "127.0.0.1:8080:80"
+
   humiditycontrol:
     image: qqrtos/humiditycontrol:latest
     container_name: humiditycontrol
@@ -9,8 +23,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    ports:
-      - "80:8080"               # http://atelier over Tailscale
     devices:
       - /dev/i2c-1:/dev/i2c-1   # enable I²C first: sudo raspi-config nonint do_i2c 0
       # The pump relay. On current Pi 5 kernels the header pins are on
@@ -21,7 +33,7 @@ services:
       # if this device doesn't exist.
       # - /dev/spidev0.0:/dev/spidev0.0
     volumes:
-      - ./data:/data            # database, photos and backups
+      - ./data/humidity:/data   # database, photos and backups
     environment:
       - SENSOR=sht4x            # sht4x (SHT40/41/45) or sht3x (SHT31)
       - SENSOR_ADDRS=0x44       # comma-separated, e.g. 0x44,0x45

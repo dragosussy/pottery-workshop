@@ -1,0 +1,17 @@
+# The way into every app: the homepage at /, and each app at /<name>/ with
+# that prefix removed before the request reaches it.
+{
+	admin off
+}
+
+:80 {
+	redir /humidity /humidity/
+	handle_path /humidity/* {
+		reverse_proxy humiditycontrol:8080
+	}
+
+	handle {
+		root * /srv
+		file_server
+	}
+}

@@ -315,11 +315,36 @@ func TestHTTP(t *testing.T) {
 		t.Errorf("backup: %q, %d bytes", resp.Header.Get("Content-Disposition"), len(body))
 	}
 
+	// The homepage tile.
+	var summary struct{ Text string }
+	call("GET", "/api/summary", nil, 200, &summary)
+	if summary.Text == "" {
+		t.Error("summary has no text")
+	}
+
 	// Unknown API paths get JSON; anything else gets the app.
 	call("GET", "/api/nope", nil, 404, nil)
 	call("POST", "/api/now", nil, 404, nil)
 	resp = call("GET", "/pieces/3", nil, 200, nil)
 	if body, _ := io.ReadAll(resp.Body); string(body) != "the app" {
 		t.Errorf("GET /pieces/3 = %q", body)
+	}
+}
+
+func TestShelfSummary(t *testing.T) {
+	cases := []struct {
+		onShelf, ready int
+		want           string
+	}{
+		{0, 0, "shelf empty"},
+		{1, 0, "1 piece"},
+		{1, 1, "1 piece, ready to trim"},
+		{3, 0, "3 pieces"},
+		{3, 2, "3 pieces, 2 ready to trim"},
+	}
+	for _, c := range cases {
+		if got := shelfSummary(c.onShelf, c.ready); got != c.want {
+			t.Errorf("shelfSummary(%d, %d) = %q, want %q", c.onShelf, c.ready, got, c.want)
+		}
 	}
 }

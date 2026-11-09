@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, watchEffect } from 'vue'
-import { api } from '@/api'
+import { api, apiUrl } from '@/api'
 import { ago } from '@/format'
 import { live, say, sayError, setNow } from '@/live'
 
@@ -61,7 +61,7 @@ const fmt = (v: number | null, unit: string) => (v === null ? '–' : `${v.toFix
     <section class="card">
       <h2>Backup</h2>
       <p class="muted small">The Pi keeps a daily copy of the database (the last 7). Photos aren't included.</p>
-      <a class="btn" href="/api/backup" download>Download a backup</a>
+      <a class="btn" :href="apiUrl('/backup')" download>Download a backup</a>
     </section>
   </main>
 </template>

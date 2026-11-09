@@ -17,6 +17,10 @@
   and API.
 - [Ideas](apps/humidity/ideas.md): next steps and things deliberately left out.
 
+**glaze notebook**, recipes, tests and results (planned):
+
+- [Design](apps/glaze/design.md): draft of what it solves and how.
+
 ## Contributing
 
 - [AGENTS.md](../AGENTS.md): the principles for developing in this repo.

@@ -93,6 +93,9 @@ export class ApiError extends Error {
   }
 }
 
+/** An API path as the browser must request it, under the app's URL prefix. */
+export const apiUrl = (path: string) => `${import.meta.env.BASE_URL}api${path}`
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method, headers: {} }
   if (body instanceof Blob) {
@@ -107,7 +110,7 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   init.signal = abort.signal
   let res: Response
   try {
-    res = await fetch('/api' + path, init)
+    res = await fetch(apiUrl(path), init)
   } catch {
     throw new ApiError("Can't reach the shelf. Check the Wi-Fi or Tailscale.", 0)
   } finally {

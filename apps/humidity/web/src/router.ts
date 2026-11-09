@@ -6,7 +6,7 @@ import FinishedView from './views/FinishedView.vue'
 import SettingsView from './views/SettingsView.vue'
 
 export const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', component: HomeView },
     { path: '/pieces/:id(\\d+)', component: PieceView },

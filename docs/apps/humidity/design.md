@@ -17,8 +17,8 @@ Raspberry Pi 5 next to the shelf:
   (SPI) beside it;
 - keeps a list of the pottery pieces on the shelf, with the potter's dryness
   checks, and estimates when each piece will be leather hard (trimmable);
-- serves a phone web app over Tailscale at `http://atelier` (plain HTTP, no
-  auth; the tailnet is the boundary).
+- serves a phone web app over Tailscale at `http://atelier/humidity/` (plain
+  HTTP, no auth; the tailnet is the boundary).
 
 The Pi is switched off between throwing sessions (days or weeks). Nothing
 special happens about that: the history simply has a gap. Fit the Pi 5's RTC
@@ -297,6 +297,7 @@ input), 404, 409 (not allowed in the current state), 413 (photo too big) or
 
 | Method + path | Body / query | Returns |
 |---|---|---|
+| `GET /api/summary` | | `{"text": "81 % · 3 pieces, 1 ready to trim"}`, for the homepage |
 | `GET /api/now` | | Now |
 | `GET /api/history` | `?hours=1`, `24` or `168` | History |
 | `PUT /api/target` | `{"pct": 82}` or `{"pct": null}` | Now |
@@ -485,9 +486,10 @@ Everything else (poll interval, backups kept, I²C bus) is a constant.
   Vite dev server proxying `/api`.
 - `make test` (same place): gofmt, `go vet` (host and linux/arm64), Go tests, then the
   web app's type-check, lint and tests.
-- Docker image and `docker-compose.yml` (repo root): port 80 → 8080, `/dev/i2c-1`
-  and `/dev/gpiochip0` mapped, `./data:/data`, logs capped at 3 × 10 MB.
-  `deploy.sh` (repo root) builds, pushes and restarts.
+- Docker image and `docker-compose.yml` (repo root): reached through the
+  gateway, `/dev/i2c-1` and `/dev/gpiochip0` mapped, `./data/humidity:/data`,
+  logs capped at 3 × 10 MB. `deploy.sh humidity` (repo root) builds, pushes and
+  restarts.
 
 ## 8. Web app
 

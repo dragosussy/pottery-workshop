@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log"
@@ -58,6 +59,7 @@ func (a *App) Handler() http.Handler {
 			}
 		})
 	}
+	api("GET /api/summary", a.getSummary)
 	api("GET /api/now", a.getNow)
 	api("GET /api/history", a.getHistory)
 	api("PUT /api/target", a.putTarget)
@@ -114,6 +116,43 @@ func (a *App) now(ctx context.Context) (*Now, error) {
 }
 
 func (a *App) getNow(r *http.Request) (any, error) { return a.now(r.Context()) }
+
+// getSummary answers the homepage's tile.
+func (a *App) getSummary(r *http.Request) (any, error) {
+	pieces, _, err := a.loadPieces(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	onShelf, ready := 0, 0
+	for _, p := range pieces {
+		if p.EndedAt != nil {
+			continue
+		}
+		onShelf++
+		if p.Estimate != nil && p.Estimate.Status == "ready" {
+			ready++
+		}
+	}
+	climate := "No reading"
+	if room, ok := a.Live.Room(time.Now()); ok {
+		climate = fmt.Sprintf("%.0f %%", room.RH)
+	}
+	return map[string]string{"text": climate + " · " + shelfSummary(onShelf, ready)}, nil
+}
+
+func shelfSummary(onShelf, ready int) string {
+	switch {
+	case onShelf == 0:
+		return "shelf empty"
+	case onShelf == 1 && ready == 1:
+		return "1 piece, ready to trim"
+	case onShelf == 1:
+		return "1 piece"
+	case ready == 0:
+		return fmt.Sprintf("%d pieces", onShelf)
+	}
+	return fmt.Sprintf("%d pieces, %d ready to trim", onShelf, ready)
+}
 
 func (a *App) getHistory(r *http.Request) (any, error) {
 	switch r.URL.Query().Get("hours") {

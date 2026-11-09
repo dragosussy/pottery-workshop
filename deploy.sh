@@ -1,14 +1,19 @@
 #!/bin/bash
-# Builds the image for the Pi, pushes it and restarts the app there.
-# Usage: ./deploy.sh   (reads PI_USER, PI_HOST and PI_DIR from .env)
+# Builds one image for the Pi, pushes it and restarts what changed there.
+# Usage: ./deploy.sh gateway|humidity   (reads PI_USER, PI_HOST and PI_DIR from .env)
 set -euo pipefail
 
-source .env
-IMAGE=qqrtos/humiditycontrol:latest
+case "${1:-}" in
+  gateway)  IMAGE=qqrtos/atelier-gateway:latest  DOCKERFILE=gateway/Dockerfile ;;
+  humidity) IMAGE=qqrtos/humiditycontrol:latest  DOCKERFILE=apps/humidity/Dockerfile ;;
+  *) echo "Usage: ./deploy.sh gateway|humidity" >&2; exit 2 ;;
+esac
 
-docker build --platform linux/arm64 -f apps/humidity/Dockerfile -t "$IMAGE" .
+source .env
+
+docker build --platform linux/arm64 -f "$DOCKERFILE" -t "$IMAGE" .
 docker push "$IMAGE"
 # One SSH session (one password prompt): copy the compose file over stdin,
 # then pull and restart.
 ssh "$PI_USER@$PI_HOST" "cd $PI_DIR && cat > docker-compose.yml && docker compose pull && docker compose up -d" < docker-compose.yml
-echo "Deployed to $PI_HOST."
+echo "Deployed $1 to $PI_HOST."
