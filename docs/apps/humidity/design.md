@@ -4,7 +4,7 @@ What the app does and how it's built, as it is now (November 2026). This is
 the second version: the first one grew into a much larger system and was
 rewritten to this page. Keep the two in step: when the code changes in a way
 this page describes, update the page. Ideas for later are in
-[ideas.md](ideas.md); getting started is in the [README](../README.md).
+[ideas.md](ideas.md); getting started is in the [README](README.md).
 
 ## 1. What it is for
 
@@ -62,7 +62,7 @@ battery so the clock is right straight after boot.
   the value in large type, and the temperature underneath; "Target 80 %" or
   "Control off" top right; "no reading" when no sensor has reported for 30 s. It redraws when the values change (checked
   every 5 s, in the same process as the sensor loop, not over HTTP) and goes
-  dark when the app stops. Wiring is in the README.
+  dark when the app stops. Wiring is in [hardware.md](hardware.md).
 
 **Housekeeping**
 - A daily database backup on the Pi (7 kept; photos aren't included), and a
@@ -429,7 +429,8 @@ check to an ended piece is a 409.
 
 ## 7. Code layout
 
-Go: about 2,300 lines plus about 1,000 of tests. Flat and boring.
+Go: about 2,300 lines plus about 1,000 of tests. Flat and boring. Paths are
+relative to `apps/humidity/`.
 
 ```
 cmd/humidity/main.go     env config, open db and hardware, start the loops and
@@ -480,13 +481,13 @@ Everything else (poll interval, backups kept, I²C bus) is a constant.
 
 ### Build and deploy
 
-- `make dev`: backend with `SENSOR=sim PUMP=sim DATA_DIR=./data`, plus the
+- `make dev` (in `apps/humidity/`): backend with `SENSOR=sim PUMP=sim DATA_DIR=./data`, plus the
   Vite dev server proxying `/api`.
-- `make test`: gofmt, `go vet` (host and linux/arm64), Go tests, then the
+- `make test` (same place): gofmt, `go vet` (host and linux/arm64), Go tests, then the
   web app's type-check, lint and tests.
-- Docker image and `docker-compose.yml` as today: port 80 → 8080, `/dev/i2c-1`
+- Docker image and `docker-compose.yml` (repo root): port 80 → 8080, `/dev/i2c-1`
   and `/dev/gpiochip0` mapped, `./data:/data`, logs capped at 3 × 10 MB.
-  `deploy.sh` builds, pushes and restarts.
+  `deploy.sh` (repo root) builds, pushes and restarts.
 
 ## 8. Web app
 

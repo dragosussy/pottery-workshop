@@ -1,5 +1,5 @@
 // Package predict estimates when pieces on the shelf will be leather hard.
-// See docs/design.md §3.
+// See docs/apps/humidity/design.md §3.
 //
 // Clay dries at a speed set by how dry the air is, 100 − RH. Rates are kept
 // at a reference humidity (RefRH): what a piece did is converted using the

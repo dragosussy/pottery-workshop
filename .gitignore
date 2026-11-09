@@ -1,7 +1,7 @@
 # Build output and local data
 /bin/
-/data/
-/humidity
+/apps/*/data/
+/apps/humidity/humidity
 
 # Local deploy settings, read by deploy.sh
 .env

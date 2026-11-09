@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"humidity/internal/hw"
+	"atelier/apps/humidity/internal/hw"
 )
 
 func TestRenderScreen(t *testing.T) {

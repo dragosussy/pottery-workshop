@@ -17,7 +17,7 @@ import (
 	"testing/fstest"
 	"time"
 
-	"humidity/internal/hw"
+	"atelier/apps/humidity/internal/hw"
 )
 
 // TestHTTP walks through the API with the sim sensor and pump and a fresh

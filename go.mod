@@ -1,4 +1,4 @@
-module humidity
+module atelier
 
 go 1.26.4
 
@@ -23,4 +23,4 @@ require (
 )
 
 // The frontend's npm dependencies may ship Go files; they aren't ours.
-ignore ./web/node_modules
+ignore ./apps/humidity/web/node_modules

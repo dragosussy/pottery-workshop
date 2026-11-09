@@ -39,7 +39,7 @@ type App struct {
 	Web     fs.FS // the built web app
 }
 
-// Handler serves the API (docs/plan.md §6) and the web app.
+// Handler serves the API (docs/apps/humidity/design.md §6) and the web app.
 func (a *App) Handler() http.Handler {
 	mux := http.NewServeMux()
 

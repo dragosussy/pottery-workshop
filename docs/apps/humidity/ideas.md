@@ -88,16 +88,6 @@ Not features: things to do once, with the hardware.
   `rclone` copy of `/data/backups` and `/data/photos` to a NAS or cloud folder
   would cover a dead card. This is a cron job, not app code.
 
-## The Pi as a studio server
-
-- **More apps on `atelier`.** The Pi's Tailscale name was chosen to host
-  other studio tools later. When a second app arrives, put a reverse proxy
-  (Caddy) in front, route by path, and make the web app work under a base
-  path (Vite's `base` plus the router's history base).
-- **HTTPS on the tailnet** (`tailscale cert`), if a feature ever needs a
-  secure context: installable PWA with offline support, camera APIs or
-  clipboard. Nothing needs it today.
-
 ## Deliberately not planned
 
 These were in the first version and removed. They shouldn't come back

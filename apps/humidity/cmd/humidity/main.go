@@ -1,6 +1,6 @@
 // Command humidity runs the drying shelf: it reads the humidity sensors,
 // runs the misting pump, keeps the list of pieces and serves the web app.
-// It is configured through the environment; see docs/plan.md §7.
+// It is configured through the environment; see docs/apps/humidity/design.md §7.
 package main
 
 import (
@@ -18,9 +18,9 @@ import (
 	"syscall"
 	"time"
 
-	"humidity/internal/app"
-	"humidity/internal/hw"
-	"humidity/web"
+	"atelier/apps/humidity/internal/app"
+	"atelier/apps/humidity/internal/hw"
+	"atelier/apps/humidity/web"
 )
 
 const i2cBus = "/dev/i2c-1"

@@ -39,7 +39,8 @@ services:
       # - PUMP_REST=3m
       # - PUMP_MAX_RH=95
       # The 1.9" ST7789 screen next to the Pi: humidity and temperature.
-      # Wiring (BCM numbers) is in the README; these are the defaults.
+      # Wiring (BCM numbers) is in docs/apps/humidity/hardware.md; these are
+      # the defaults.
       - SCREEN=none             # none | st7789
       # - SCREEN_DC=25
       # - SCREEN_RST=27

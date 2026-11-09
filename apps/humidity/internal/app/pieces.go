@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"humidity/internal/predict"
+	"atelier/apps/humidity/internal/predict"
 )
 
 var (

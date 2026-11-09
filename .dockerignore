@@ -1,10 +1,11 @@
 .git
 .env*
-humidity
 bin/
-data/
+docs/
 *.md
-web/node_modules
-web/dist
-web/test-results
-web/playwright-report
+apps/*/data/
+apps/humidity/humidity
+apps/*/web/node_modules
+apps/*/web/dist
+apps/*/web/test-results
+apps/*/web/playwright-report

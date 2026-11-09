@@ -6,7 +6,7 @@ set -euo pipefail
 source .env
 IMAGE=qqrtos/humiditycontrol:latest
 
-docker build --platform linux/arm64 -t "$IMAGE" .
+docker build --platform linux/arm64 -f apps/humidity/Dockerfile -t "$IMAGE" .
 docker push "$IMAGE"
 # One SSH session (one password prompt): copy the compose file over stdin,
 # then pull and restart.

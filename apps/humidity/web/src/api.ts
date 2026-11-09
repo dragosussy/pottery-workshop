@@ -1,4 +1,4 @@
-// Types and calls for the HTTP API (docs/plan.md §6). Times are RFC 3339 UTC
+// Types and calls for the HTTP API (docs/apps/humidity/design.md §6). Times are RFC 3339 UTC
 // strings; history arrays use unix seconds.
 
 export type Form = 'bowl' | 'mug' | 'plate' | 'vase' | 'other'

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"humidity/internal/hw"
+	"atelier/apps/humidity/internal/hw"
 )
 
 const (

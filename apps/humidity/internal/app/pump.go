@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"humidity/internal/hw"
+	"atelier/apps/humidity/internal/hw"
 )
 
-// See docs/plan.md §4.
+// See docs/apps/humidity/design.md §4.
 const (
 	decideEvery = 5 * time.Second
 	minRise     = 0.3 // %RH a pulse must raise the room by to count as working

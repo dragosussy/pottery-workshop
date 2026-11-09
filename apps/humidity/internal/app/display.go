@@ -15,7 +15,7 @@ import (
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
 
-	"humidity/internal/hw"
+	"atelier/apps/humidity/internal/hw"
 )
 
 // Screen colours: the web app's dark "tide" palette.
