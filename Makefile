@@ -24,3 +24,5 @@ dev:
 # Everything that should pass before a deploy, for every app.
 test:
 	$(MAKE) -C apps/humidity test
+	docker build -q -f backup/Dockerfile -t atelier-backup-test . >/dev/null
+	docker run --rm --entrypoint sh -v "$(CURDIR)/backup/test.sh:/test.sh:ro" atelier-backup-test /test.sh

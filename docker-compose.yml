@@ -13,6 +13,22 @@ services:
       # docs/deployment.md) is the way in, so the local network has no access.
       - "127.0.0.1:8080:80"
 
+  backup:
+    image: qqrtos/atelier-backup:latest
+    container_name: backup
+    restart: always
+    init: true                  # so a stop or restart doesn't wait for a timeout
+    logging:                    # keep logs bounded on the SD card
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    env_file:                   # the R2 token; see docs/deployment.md
+      - path: backup.env
+        required: false         # other services can deploy before this is set up
+    volumes:
+      - ./data:/data:ro         # read-only: it can never change what it backs up
+
   humiditycontrol:
     image: qqrtos/humiditycontrol:latest
     container_name: humiditycontrol

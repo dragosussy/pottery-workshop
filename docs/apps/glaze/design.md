@@ -1,8 +1,7 @@
 # Glaze notebook: design
 
 **Status: draft, nothing is built yet.** This page sets out what the app is
-for and how it would work. The one question left in
-[§10](#10-open-questions) doesn't affect the schema.
+for and how it would work.
 
 ## 1. The problem
 
@@ -311,18 +310,18 @@ phone entry.
 
 Same stack as humidity: one Go binary embedding a Vue app, SQLite through
 modernc, in `apps/glaze/`, and the rules in
-[Architecture](../../architecture.md#rules-every-app-follows) apply.
+[Architecture](../../architecture.md#rules-every-app-follows) apply, including
+using the [shared code](../../architecture.md#shared-code).
 `GET /api/summary` returns the counts for the homepage tile: on the bench and
 waiting for result. No new dependencies are expected, and there's no hardware
 code, so no simulator either.
 
 | Area | Implication |
 |---|---|
-| **Data safety** | Backups today cover only the database and stay on the SD card. Here, photos are the record, so **glaze depends on off-device backups that include photos.** That's a system-wide change covering humidity as well, planned separately. |
+| **Data safety** | Backups today cover only the database and stay on the SD card. Here, photos are the record, so **glaze depends on the [off-device backups](../../architecture.md#data), which include photos,** being set up and restored successfully at least once before real data goes in. |
 | **Availability** | The Pi stays on from now on, so the notebook is there whenever people glaze or want to look something up. |
 | **Hardware** | The app doesn't touch the pump, sensors or screen. But with the Pi always on, humidity's pump control runs whenever a target is saved, so a target left set on an empty shelf keeps misting. |
 | **Other apps** | The gateway goes in first. It moves humidity to `/humidity/` and its data to `data/humidity/`, which is a manual step on the Pi. Glaze is then an ordinary route at `/glaze/`, with its data in `data/glaze/`. |
-| **Shared code** | This is the second app that needs photo processing, the daily snapshot and JSON error handling, so those move into `shared/kit/`. The thickness slider is humidity's `PreciseSlider`: it moves into `shared/ui/` with the design tokens, and its "trim band" label and dryness colours become options. Humidity's behaviour stays the same. |
 | **Use** | Two or three people, mostly on their own phones. Recently used materials are worked out from the layers, so everyone sees the same list. If two people save the same record, the last save wins, which is fine at this scale. |
 | **Repo changes** | `deploy.sh` takes an app name, the root `Makefile` gets the new app, and `go.mod` gets another `ignore` line for its `node_modules`. |
 | **Storage** | Around 0.5 MB per photo, so thousands of photos fit, but on the SD card. |
@@ -347,8 +346,3 @@ itself.
    on a layer.
 4. **Finding things:** browse and filters, keepers, a material's results by
    clay body.
-
-## 10. Open questions
-
-1. **Where do off-device backups go?** Being worked out as a system-wide
-   change.

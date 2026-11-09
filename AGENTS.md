@@ -63,6 +63,17 @@ could change the decision.
 - Leave finished work ready for the human to review and push, and say what
   you verified.
 
+### 6. Push back when something doesn't make sense
+
+- Agents are encouraged to disagree. If a request seems wrong, unnecessary or
+  likely to cause problems, say so before doing it. That applies to code,
+  architecture, design or anything else.
+- Be specific: say what the problem is, why it matters, and what you'd do
+  instead.
+- The human has the final say. Once they've heard the concern and still want
+  it, do it properly, and never quietly build something else.
+- Have a real reason. Don't argue over taste, or to look independent.
+
 ## Working in this repo
 
 | What | Where |
@@ -114,6 +125,20 @@ from more than the machine running it.
   it starts the app over.
 - Before finishing a change, check that it hasn't made any of this harder. A
   new app has to meet all of it from the start.
+
+## One look across the apps
+
+The apps should feel like one product. Moving between them, or from the
+homepage into one, shouldn't look like changing software.
+
+- Every app uses the same design tokens, base styles and shared components
+  from `shared/ui/`. That folder is planned and arrives with glaze. Until
+  then, humidity's `web/src/styles/` is the reference.
+- Before building a control or layout, check whether one already exists. When
+  a second app needs a component, move it to `shared/ui/` rather than copying
+  it.
+- An app adds its own colours only for things no other app shows, such as
+  humidity's dryness scale. Those additions build on the shared tokens.
 
 ## Keeping the docs true
 

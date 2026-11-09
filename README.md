@@ -21,7 +21,7 @@ AI agents working here follow [AGENTS.md](AGENTS.md).
 make dev                     # everything on http://localhost:8000, simulated hardware
 make test                    # every check for every app
 make -C apps/humidity dev    # one app on its own
-./deploy.sh humidity         # build, push and restart on the Pi (or: gateway)
+./deploy.sh humidity         # build, push and restart on the Pi (or: gateway, backup)
 ```
 
 Deploying is covered in [docs/deployment.md](docs/deployment.md).

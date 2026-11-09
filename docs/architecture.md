@@ -12,9 +12,9 @@ independent apps. A homepage is the way into all of them.
 | Gateway and homepage | Done |
 | Tailnet-only access | Done |
 | Each app's data in `data/<app>/` on the Pi | Done |
-| Off-device backups | Planned |
+| Off-device backups | Built, waiting for its Cloudflare setup on the Pi |
 | Glaze notebook | Planned |
-| `shared/` code and npm workspaces | When the second app needs them |
+| `shared/` code | Planned, with glaze |
 
 ## How it fits together
 
@@ -50,6 +50,7 @@ atelier/
 ├── apps/
 │   └── humidity/         the app: cmd, internal, web, Dockerfile, Makefile
 ├── gateway/              the Caddyfile, the homepage and its list of apps
+├── backup/               the daily copy of every app's data to Cloudflare R2
 ├── docs/                 all documentation
 ├── AGENTS.md             principles for developing here
 ├── docker-compose.yml    everything that runs on the Pi
@@ -61,9 +62,7 @@ atelier/
 Planned additions:
 
 - `apps/glaze/`: the glaze notebook.
-- `shared/ui/` and `shared/kit/`: common Vue and Go code, added only when a
-  second app needs it. Glaze will probably need photo handling, backups, JSON
-  helpers and the design tokens.
+- `shared/`: see [Shared code](#shared-code).
 
 ## Rules every app follows
 
@@ -73,21 +72,60 @@ An app in this repo:
    gateway strips it.
 2. Builds its web app for `/<name>/`, including API calls, routes and the
    manifest.
-3. Keeps all of its state in `/data`.
-4. Writes a daily database snapshot to `/data/backups`.
+3. Keeps all of its state in `/data`, with live databases at the top level.
+   Everything else there is backed up off the Pi, so caches go elsewhere.
+4. Writes a daily database snapshot to `/data/backups`, named `YYYY-MM-DD.db`.
 5. Shuts down cleanly on SIGTERM.
 6. Offers `GET /api/summary` for its homepage tile, answering
    `{"text": "one short line"}`.
 7. Caps its logs in `docker-compose.yml`, to protect the SD card.
+8. Uses the [shared code](#shared-code) instead of keeping its own version.
+
+## Shared code
+
+Apps run independently, but they shouldn't each solve the same problem their
+own way or look like different products. Both folders are planned and arrive
+with glaze, the first app to need them.
+
+| Folder | What's in it | Why |
+|---|---|---|
+| `shared/ui/` | Design tokens, base styles and any Vue component used by more than one app | Every app and the homepage look the same. It starts from humidity's styles. |
+| `shared/kit/` | Go code: photo processing, database snapshots, JSON error handling | Every app stores photos and reports errors the same way |
+
+- Code moves here when a second app needs it, not before and not as a copy.
+- Moving code here must leave the app it came from behaving the same.
+- Anything specific to one app becomes an option or stays in that app. The
+  dryness slider's "trim band" label is an option, because glaze's thickness
+  slider is the same control without it.
 
 ## Data
 
 Apps never read each other's databases. If one app needs another's data, it
 calls that app's HTTP API.
 
-All data is on the Pi's SD card until off-device backups exist. Glaze recipes
-and test results can't be recreated, so backups have to be running before the
-notebook holds real work.
+Once a day the `backup` service copies each app's data to a private Cloudflare
+R2 bucket. It finds everything in `data/<app>/` by itself, so a new app needs
+no backup setup. Glaze recipes and test results can't be recreated, so backups
+have to be running before the notebook holds real work.
+
+| In the bucket | What | Kept |
+|---|---|---|
+| `snapshots/<app>/` | Each day's database snapshot | 90 days |
+| `monthly/<app>/` | The snapshot from the 1st of each month | Forever |
+| `files/<app>/` | Photos and any other files | Forever |
+| `replaced/<date>/<app>/` | Earlier versions of files that were replaced | 90 days |
+
+| Decision | Reason |
+|---|---|
+| Copies only, never mirrors | A mistake on the Pi can't delete the good copy. |
+| Only snapshots of databases | A live SQLite file copied mid-write can be corrupt. |
+| Retention and locks set in the bucket | The Pi can't shorten its own history. |
+| No encryption | Recipes and pot photos aren't sensitive, and a lost password would make everything unrecoverable. |
+| A healthchecks.io report after each success | A missing report raises the alarm, even if the whole Pi has died. |
+
+All of this should fit R2's free 10 GB for about three and a half years. When
+it gets close, shorten `snapshots/` and `replaced/` to 30 days in the bucket
+rules.
 
 ## Access
 

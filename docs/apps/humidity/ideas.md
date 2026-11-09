@@ -82,11 +82,6 @@ Not features: things to do once, with the hardware.
   there are a few dozen finished pieces.
 - **Export** pieces and checks as CSV from Settings, for a spreadsheet. About
   30 lines.
-- **Photos in backups.** The daily backup is the database only. Either add
-  `photos/` to the download as a zip, or document copying the folder.
-- **Off-device backups.** Everything lives on the Pi's SD card. A nightly
-  `rclone` copy of `/data/backups` and `/data/photos` to a NAS or cloud folder
-  would cover a dead card. This is a cron job, not app code.
 
 ## Deliberately not planned
 

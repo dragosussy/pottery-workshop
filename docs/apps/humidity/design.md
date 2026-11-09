@@ -581,5 +581,5 @@ constants in the frontend.
   its `/data/humidity.db` aside before the first deploy: the new schema won't
   create on top of it.
 - The pump's safety stop is held in memory; a reboot clears it.
-- Backups don't include photos; copy `$DATA_DIR/photos` separately if they
-  matter.
+- The app's own daily backup and download don't include photos. The
+  system-wide [off-device backup](../../architecture.md#data) does.

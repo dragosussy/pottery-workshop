@@ -12,3 +12,6 @@
 *.out
 go.work
 go.work.sum
+
+# Secrets for the backup service, kept on the Pi
+backup.env
